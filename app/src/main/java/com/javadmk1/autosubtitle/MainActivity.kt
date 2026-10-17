@@ -39,6 +39,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_PICK_MEDIA = 100
         private const val REQUEST_EXPORT_SRT = 101
+        private const val REQUEST_IMPORT_SRT = 102
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +124,7 @@ class MainActivity : Activity() {
 
         addCueButton = makeButton("افزودن زیرنویس") { addCue() }
         content.addView(addCueButton, matchWidth())
+        content.addView(makeButton("وارد کردن فایل زیرنویس SRT") { importSrtFile() }, matchWidth())
         content.addView(makeButton("خروجی گرفتن فایل SRT") { exportSrt() }, matchWidth())
 
         content.addView(TextView(this).apply {
@@ -175,6 +177,9 @@ class MainActivity : Activity() {
             }
             REQUEST_EXPORT_SRT -> {
                 data.data?.let { uri -> writeSrt(uri) }
+            }
+            REQUEST_IMPORT_SRT -> {
+                data.data?.let { uri -> readSrt(uri) }
             }
         }
     }
@@ -432,6 +437,57 @@ class MainActivity : Activity() {
                 setBackgroundColor(0xFFD5D9DE.toInt())
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         }
+    }
+    private fun importSrtFile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/x-subrip", "text/plain", "application/octet-stream"))
+        }
+        startActivityForResult(intent, REQUEST_IMPORT_SRT)
+    }
+
+    private fun readSrt(uri: Uri) {
+        Thread {
+            try {
+                val raw = contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: throw IllegalStateException("فایل زیرنویس قابل خواندن نیست")
+                val timestamp = Regex("""(\d{2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{1,3})""")
+                fun millis(match: MatchResult, offset: Int): Long {
+                    val h = match.groupValues[offset].toLong()
+                    val m = match.groupValues[offset + 1].toLong()
+                    val sec = match.groupValues[offset + 2].toLong()
+                    val fraction = match.groupValues[offset + 3].padEnd(3, '0').take(3).toLong()
+                    return ((h * 3600 + m * 60 + sec) * 1000) + fraction
+                }
+                val imported = mutableListOf<Cue>()
+                raw.removePrefix("\uFEFF").split(Regex("""\r?\n\s*\r?\n""")).forEach { block ->
+                    val lines = block.lines()
+                    val timeIndex = lines.indexOfFirst { timestamp.containsMatchIn(it) }
+                    if (timeIndex >= 0) {
+                        val match = timestamp.find(lines[timeIndex])!!
+                        val start = millis(match, 1)
+                        val end = millis(match, 5)
+                        val text = lines.drop(timeIndex + 1).joinToString("\n").trim()
+                        if (text.isNotEmpty() && end > start) imported.add(Cue(start, end, text))
+                    }
+                }
+                runOnUiThread {
+                    if (imported.isEmpty()) {
+                        toast("هیچ زیرنویس معتبر SRT در فایل پیدا نشد")
+                    } else {
+                        cues.clear()
+                        cues.addAll(imported.sortedBy { it.startMs })
+                        editingCueIndex = null
+                        addCueButton.text = "افزودن زیرنویس"
+                        refreshCueList()
+                        toast("تعداد " + imported.size + " بخش زیرنویس وارد شد")
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread { toast("خواندن SRT ناموفق بود: " + (error.message ?: "خطای ناشناخته")) }
+            }
+        }.start()
     }
     private fun exportSrt() {
         if (cues.isEmpty()) {
