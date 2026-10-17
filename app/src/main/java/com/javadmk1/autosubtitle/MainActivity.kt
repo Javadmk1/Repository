@@ -21,6 +21,11 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
 import android.widget.MediaController
+import android.widget.SeekBar
+import android.widget.Spinner
+import android.widget.ArrayAdapter
+import android.widget.CheckBox
+import android.graphics.Color
 import android.database.Cursor
 import android.provider.OpenableColumns
 import android.graphics.Canvas
@@ -51,7 +56,37 @@ class MainActivity : Activity() {
     private val cues = mutableListOf<Cue>()
     private lateinit var selectedFileLabel: TextView
     private lateinit var videoPreview: VideoView
+    private lateinit var previewFrame: FrameLayout
     private lateinit var subtitleOverlay: TextView
+    private lateinit var fontSpinner: Spinner
+    private lateinit var textColorSpinner: Spinner
+    private lateinit var outlineColorSpinner: Spinner
+    private lateinit var boxColorSpinner: Spinner
+    private lateinit var sizeSeekBar: SeekBar
+    private lateinit var positionSeekBar: SeekBar
+    private lateinit var outlineSeekBar: SeekBar
+    private lateinit var opacitySeekBar: SeekBar
+    private lateinit var boldCheckBox: CheckBox
+    private lateinit var shadowCheckBox: CheckBox
+    private lateinit var boxCheckBox: CheckBox
+    private var subtitleSizeSp = 19
+    private var subtitlePosition = 88
+    private var outlineWidth = 2
+    private var backgroundOpacity = 80
+    private var fontIndex = 0
+    private var textColorIndex = 0
+    private var outlineColorIndex = 0
+    private var boxColorIndex = 0
+    private var isBold = true
+    private var shadowEnabled = true
+    private var boxEnabled = true
+    private val fontNames = arrayOf("Sans-serif", "Serif", "Monospace", "Sans-serif condensed", "Casual", "Cursive")
+    private val textColorNames = arrayOf("سفید", "زرد", "فیروزه‌ای", "قرمز", "سبز")
+    private val outlineColorNames = arrayOf("مشکی", "سفید", "سرمه‌ای", "قرمز")
+    private val boxColorNames = arrayOf("مشکی", "سرمه‌ای", "زرشکی", "بدون رنگ")
+    private val textColors = intArrayOf(Color.WHITE, Color.YELLOW, 0xFF40E0D0.toInt(), Color.RED, Color.GREEN)
+    private val outlineColors = intArrayOf(Color.BLACK, Color.WHITE, 0xFF101B35.toInt(), 0xFFB00020.toInt())
+    private val boxColors = intArrayOf(Color.BLACK, 0xFF101B35.toInt(), 0xFF6D1020.toInt(), Color.TRANSPARENT)
     private val previewHandler = Handler(Looper.getMainLooper())
     private val previewTicker = object : Runnable {
         override fun run() {
@@ -62,6 +97,7 @@ class MainActivity : Activity() {
                 val activeCue = cues.firstOrNull { position >= it.startMs && position < it.endMs }
                 subtitleOverlay.text = activeCue?.text.orEmpty()
                 subtitleOverlay.visibility = if (activeCue == null) android.view.View.GONE else android.view.View.VISIBLE
+                applySubtitleStyle()
             } else if (::subtitleOverlay.isInitialized) {
                 subtitleOverlay.visibility = android.view.View.GONE
             }
@@ -113,7 +149,7 @@ class MainActivity : Activity() {
         }
         content.addView(selectedFileLabel, matchWidth())
 
-        val previewFrame = FrameLayout(this)
+        previewFrame = FrameLayout(this)
         videoPreview = VideoView(this).apply {
             visibility = android.view.View.GONE
             setBackgroundColor(0xFF111111.toInt())
@@ -127,18 +163,65 @@ class MainActivity : Activity() {
         subtitleOverlay = TextView(this).apply {
             textSize = 19f
             gravity = Gravity.CENTER
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0x99000000.toInt())
-            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xCC000000.toInt())
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            maxWidth = (resources.displayMetrics.widthPixels * 0.88f).toInt()
             visibility = android.view.View.GONE
         }
         previewFrame.addView(subtitleOverlay, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        ).apply { setMargins(dp(10), 0, dp(10), dp(18)) })
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        ))
         content.addView(previewFrame, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(220)
         ).apply { bottomMargin = dp(12) })
+        content.addView(TextView(this).apply {
+            text = "تنظیمات ظاهر زیرنویس"
+            textSize = 19f
+            setPadding(0, dp(8), 0, dp(6))
+        }, matchWidth())
+        fun addSettingLabel(label: String) {
+            content.addView(TextView(this).apply {
+                text = label
+                textSize = 13f
+                setPadding(0, dp(5), 0, dp(2))
+            }, matchWidth())
+        }
+        fun makeSpinner(items: Array<String>): Spinner {
+            return Spinner(this).apply {
+                adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, items)
+            }
+        }
+        addSettingLabel("نوع فونت")
+        fontSpinner = makeSpinner(fontNames)
+        content.addView(fontSpinner, matchWidth())
+        addSettingLabel("رنگ متن")
+        textColorSpinner = makeSpinner(textColorNames)
+        content.addView(textColorSpinner, matchWidth())
+        addSettingLabel("رنگ حاشیه")
+        outlineColorSpinner = makeSpinner(outlineColorNames)
+        content.addView(outlineColorSpinner, matchWidth())
+        addSettingLabel("رنگ پس‌زمینه")
+        boxColorSpinner = makeSpinner(boxColorNames)
+        content.addView(boxColorSpinner, matchWidth())
+        fun makeSlider(label: String, maxValue: Int, initial: Int): SeekBar {
+            addSettingLabel(label)
+            return SeekBar(this).apply {
+                max = maxValue
+                progress = initial
+            }.also { content.addView(it, matchWidth()) }
+        }
+        sizeSeekBar = makeSlider("اندازهٔ فونت (۱۴ تا ۵۶)", 42, 5)
+        positionSeekBar = makeSlider("جای زیرنویس (بالا تا پایین)", 100, 88)
+        outlineSeekBar = makeSlider("ضخامت حاشیه", 10, 2)
+        opacitySeekBar = makeSlider("شفافیت پس‌زمینه", 100, 80)
+        boldCheckBox = CheckBox(this).apply { text = "فونت ضخیم"; isChecked = true }
+        shadowCheckBox = CheckBox(this).apply { text = "سایهٔ متن"; isChecked = true }
+        boxCheckBox = CheckBox(this).apply { text = "نمایش کادر پس‌زمینه"; isChecked = true }
+        content.addView(boldCheckBox, matchWidth())
+        content.addView(shadowCheckBox, matchWidth())
+        content.addView(boxCheckBox, matchWidth())
 
         content.addView(TextView(this).apply {
             text = "کلید API برای تبدیل خودکار (اختیاری؛ هزینهٔ سرویس جداست)"
@@ -214,8 +297,97 @@ class MainActivity : Activity() {
             setPadding(0, dp(16), 0, dp(8))
         }, matchWidth())
 
+        val prefs = getSharedPreferences("subtitle_style", MODE_PRIVATE)
+        subtitleSizeSp = prefs.getInt("size", 19).coerceIn(14, 56)
+        subtitlePosition = prefs.getInt("position", 88).coerceIn(0, 100)
+        outlineWidth = prefs.getInt("outline", 2).coerceIn(0, 10)
+        backgroundOpacity = prefs.getInt("opacity", 80).coerceIn(0, 100)
+        fontIndex = prefs.getInt("font", 0).coerceIn(fontNames.indices)
+        textColorIndex = prefs.getInt("textColor", 0).coerceIn(textColors.indices)
+        outlineColorIndex = prefs.getInt("outlineColor", 0).coerceIn(outlineColors.indices)
+        boxColorIndex = prefs.getInt("boxColor", 0).coerceIn(boxColors.indices)
+        isBold = prefs.getBoolean("bold", true)
+        shadowEnabled = prefs.getBoolean("shadow", true)
+        boxEnabled = prefs.getBoolean("box", true)
+        fontSpinner.setSelection(fontIndex)
+        textColorSpinner.setSelection(textColorIndex)
+        outlineColorSpinner.setSelection(outlineColorIndex)
+        boxColorSpinner.setSelection(boxColorIndex)
+        sizeSeekBar.progress = subtitleSizeSp - 14
+        positionSeekBar.progress = subtitlePosition
+        outlineSeekBar.progress = outlineWidth
+        opacitySeekBar.progress = backgroundOpacity
+        boldCheckBox.isChecked = isBold
+        shadowCheckBox.isChecked = shadowEnabled
+        boxCheckBox.isChecked = boxEnabled
+        val styleChanged = {
+            subtitleSizeSp = sizeSeekBar.progress + 14
+            subtitlePosition = positionSeekBar.progress
+            outlineWidth = outlineSeekBar.progress
+            backgroundOpacity = opacitySeekBar.progress
+            fontIndex = fontSpinner.selectedItemPosition.coerceAtLeast(0)
+            textColorIndex = textColorSpinner.selectedItemPosition.coerceAtLeast(0)
+            outlineColorIndex = outlineColorSpinner.selectedItemPosition.coerceAtLeast(0)
+            boxColorIndex = boxColorSpinner.selectedItemPosition.coerceAtLeast(0)
+            isBold = boldCheckBox.isChecked
+            shadowEnabled = shadowCheckBox.isChecked
+            boxEnabled = boxCheckBox.isChecked
+            prefs.edit().putInt("size", subtitleSizeSp).putInt("position", subtitlePosition)
+                .putInt("outline", outlineWidth).putInt("opacity", backgroundOpacity)
+                .putInt("font", fontIndex).putInt("textColor", textColorIndex)
+                .putInt("outlineColor", outlineColorIndex).putInt("boxColor", boxColorIndex)
+                .putBoolean("bold", isBold).putBoolean("shadow", shadowEnabled)
+                .putBoolean("box", boxEnabled).apply()
+            applySubtitleStyle()
+        }
+        val sliderListener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { styleChanged() }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        }
+        sizeSeekBar.setOnSeekBarChangeListener(sliderListener)
+        positionSeekBar.setOnSeekBarChangeListener(sliderListener)
+        outlineSeekBar.setOnSeekBarChangeListener(sliderListener)
+        opacitySeekBar.setOnSeekBarChangeListener(sliderListener)
+        val spinnerListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) { styleChanged() }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+        fontSpinner.onItemSelectedListener = spinnerListener
+        textColorSpinner.onItemSelectedListener = spinnerListener
+        outlineColorSpinner.onItemSelectedListener = spinnerListener
+        boxColorSpinner.onItemSelectedListener = spinnerListener
+        val checkListener = android.widget.CompoundButton.OnCheckedChangeListener { _, _ -> styleChanged() }
+        boldCheckBox.setOnCheckedChangeListener(checkListener)
+        shadowCheckBox.setOnCheckedChangeListener(checkListener)
+        boxCheckBox.setOnCheckedChangeListener(checkListener)
         setContentView(scroll)
+        applySubtitleStyle()
         previewHandler.post(previewTicker)
+    }
+
+    private fun applySubtitleStyle() {
+        if (!::subtitleOverlay.isInitialized) return
+        subtitleOverlay.textSize = subtitleSizeSp.toFloat()
+        subtitleOverlay.typeface = Typeface.create(fontNames[fontIndex.coerceIn(fontNames.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
+        subtitleOverlay.setTextColor(textColors[textColorIndex.coerceIn(textColors.indices)])
+        val alpha = (backgroundOpacity * 255 / 100).coerceIn(0, 255)
+        val baseBox = boxColors[boxColorIndex.coerceIn(boxColors.indices)]
+        subtitleOverlay.setBackgroundColor(if (boxEnabled && baseBox != Color.TRANSPARENT) Color.argb(alpha, Color.red(baseBox), Color.green(baseBox), Color.blue(baseBox)) else Color.TRANSPARENT)
+        subtitleOverlay.setShadowLayer(
+            if (shadowEnabled) dp(3).toFloat() else outlineWidth.toFloat(),
+            0f, if (shadowEnabled) dp(2).toFloat() else 0f,
+            if (shadowEnabled) Color.BLACK else outlineColors[outlineColorIndex.coerceIn(outlineColors.indices)]
+        )
+        subtitleOverlay.setPadding(dp(10), dp(5), dp(10), dp(5))
+        if (::previewFrame.isInitialized && subtitleOverlay.layoutParams is FrameLayout.LayoutParams) {
+            subtitleOverlay.post {
+                val params = subtitleOverlay.layoutParams as FrameLayout.LayoutParams
+                params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                params.topMargin = ((previewFrame.height - subtitleOverlay.height).coerceAtLeast(0) * subtitlePosition / 100)
+                previewFrame.updateViewLayout(subtitleOverlay, params)
+            }
+        }
     }
 
     override fun onDestroy() {
