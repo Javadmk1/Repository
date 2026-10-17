@@ -121,6 +121,7 @@ class MainActivity : Activity() {
         private const val REQUEST_EXPORT_SRT = 101
         private const val REQUEST_IMPORT_SRT = 102
         private const val REQUEST_EXPORT_MP4 = 103
+        private const val MAX_TRANSCRIPTION_UPLOAD_BYTES = 24L * 1024L * 1024L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -462,6 +463,7 @@ class MainActivity : Activity() {
         when (requestCode) {
             REQUEST_PICK_MEDIA -> {
                 selectedMediaUri = data.data
+                lastPreviewCueIndex = Int.MIN_VALUE
                 try {
                     contentResolver.takePersistableUriPermission(
                         data.data!!,
@@ -523,6 +525,10 @@ class MainActivity : Activity() {
                     extractedAudio = extractAudioTrack(uri)
                     extractedAudio!!
                 } else null
+                val uploadSize = audioFile?.length() ?: getFileSize(uri)
+                if (uploadSize > MAX_TRANSCRIPTION_UPLOAD_BYTES) {
+                    throw IllegalStateException("حجم فایل برای ارسال زیاد است؛ فایل صوتی باید کمتر از ۲۴ مگابایت باشد")
+                }
                 val boundary = "----AutoSubtitleBoundary" + System.currentTimeMillis()
                 connection = (URL("https://api.openai.com/v1/audio/transcriptions").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
@@ -651,6 +657,15 @@ class MainActivity : Activity() {
             try { muxer?.release() } catch (_: Exception) {}
             extractor.release()
         }
+    }
+
+    private fun getFileSize(uri: Uri): Long {
+        val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+        cursor?.use {
+            val index = it.getColumnIndex(OpenableColumns.SIZE)
+            if (index >= 0 && it.moveToFirst() && !it.isNull(index)) return it.getLong(index)
+        }
+        return -1L
     }
 
     private fun getDisplayName(uri: Uri): String {
