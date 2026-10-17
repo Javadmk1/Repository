@@ -8,9 +8,12 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import java.io.File
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -30,6 +33,23 @@ class MainActivity : Activity() {
     private val cues = mutableListOf<Cue>()
     private lateinit var selectedFileLabel: TextView
     private lateinit var videoPreview: VideoView
+    private lateinit var subtitleOverlay: TextView
+    private val previewHandler = Handler(Looper.getMainLooper())
+    private val previewTicker = object : Runnable {
+        override fun run() {
+            if (::videoPreview.isInitialized && ::subtitleOverlay.isInitialized &&
+                videoPreview.visibility == android.view.View.VISIBLE && videoPreview.isPlaying
+            ) {
+                val position = videoPreview.currentPosition.toLong()
+                val activeCue = cues.firstOrNull { position >= it.startMs && position < it.endMs }
+                subtitleOverlay.text = activeCue?.text.orEmpty()
+                subtitleOverlay.visibility = if (activeCue == null) android.view.View.GONE else android.view.View.VISIBLE
+            } else if (::subtitleOverlay.isInitialized) {
+                subtitleOverlay.visibility = android.view.View.GONE
+            }
+            previewHandler.postDelayed(this, 200)
+        }
+    }
     private lateinit var subtitleInput: EditText
     private lateinit var startInput: EditText
     private lateinit var endInput: EditText
@@ -74,6 +94,7 @@ class MainActivity : Activity() {
         }
         content.addView(selectedFileLabel, matchWidth())
 
+        val previewFrame = FrameLayout(this)
         videoPreview = VideoView(this).apply {
             visibility = android.view.View.GONE
             setBackgroundColor(0xFF111111.toInt())
@@ -81,7 +102,22 @@ class MainActivity : Activity() {
             setMediaController(controller)
             controller.setAnchorView(this)
         }
-        content.addView(videoPreview, LinearLayout.LayoutParams(
+        previewFrame.addView(videoPreview, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(220)
+        ))
+        subtitleOverlay = TextView(this).apply {
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0x99000000.toInt())
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            visibility = android.view.View.GONE
+        }
+        previewFrame.addView(subtitleOverlay, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        ).apply { setMargins(dp(10), 0, dp(10), dp(18)) })
+        content.addView(previewFrame, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(220)
         ).apply { bottomMargin = dp(12) })
 
@@ -159,6 +195,13 @@ class MainActivity : Activity() {
         }, matchWidth())
 
         setContentView(scroll)
+        previewHandler.post(previewTicker)
+    }
+
+    override fun onDestroy() {
+        previewHandler.removeCallbacks(previewTicker)
+        if (::videoPreview.isInitialized) videoPreview.stopPlayback()
+        super.onDestroy()
     }
 
     private fun pickMedia() {
@@ -191,10 +234,12 @@ class MainActivity : Activity() {
                 val selectedMime = contentResolver.getType(selectedUri) ?: ""
                 if (selectedMime.startsWith("video/")) {
                     videoPreview.visibility = android.view.View.VISIBLE
+                    subtitleOverlay.visibility = android.view.View.GONE
                     videoPreview.setVideoURI(selectedUri)
                 } else {
                     videoPreview.stopPlayback()
                     videoPreview.visibility = android.view.View.GONE
+                    subtitleOverlay.visibility = android.view.View.GONE
                 }
                 toast(if (selectedMime.startsWith("video/")) "ویدئو انتخاب شد؛ برای پخش از کنترل‌های ویدئو استفاده کن" else "فایل صوتی انتخاب شد")
             }
