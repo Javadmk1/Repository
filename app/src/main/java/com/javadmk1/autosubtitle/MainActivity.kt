@@ -51,8 +51,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class MainActivity : Activity() {
-    private data class Cue(val startMs: Long, val endMs: Long, val text: String)
-
     private val cues = mutableListOf<Cue>()
     private lateinit var selectedFileLabel: TextView
     private lateinit var videoPreview: VideoView
