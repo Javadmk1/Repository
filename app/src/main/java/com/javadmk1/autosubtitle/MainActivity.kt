@@ -244,6 +244,8 @@ class MainActivity : Activity() {
             setPadding(0, dp(2), 0, dp(12))
         }, matchWidth())
 
+        content.addView(makeButton("حریم خصوصی و نحوهٔ پردازش فایل‌ها") { showPrivacyNotice() }, matchWidth())
+
         content.addView(TextView(this).apply {
             text = "متن زیرنویس"
             textSize = 16f
@@ -368,6 +370,22 @@ class MainActivity : Activity() {
         setContentView(scroll)
         applySubtitleStyle()
         previewHandler.post(previewTicker)
+    }
+
+    private fun showPrivacyNotice() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("حریم خصوصی و داده‌ها")
+            .setMessage(
+                "فایل‌ها فقط وقتی برای تبدیل خودکار دکمه را می‌زنی به سرویس OpenAI ارسال می‌شوند. " +
+                "برای ویدئو، برنامه صدای آن را استخراج می‌کند و همان صدا را می‌فرستد. " +
+                "این پردازش آنلاین است و ممکن است هزینهٔ API داشته باشد. " +
+                "کلید API عمداً در تنظیمات یا فایل دائمی برنامه ذخیره نمی‌شود؛ پس از شروع درخواست، فیلد کلید پاک می‌شود. " +
+                "فایل اصلی برای ساخت زیرنویس تغییر نمی‌کند. فایل‌های موقت استخراج صدا پس از پایان درخواست پاک می‌شوند. " +
+                "از ارسال فایل‌های حساس یا متعلق به دیگران بدون اجازه خودداری کن. " +
+                "این نسخه هنوز به سیاست حریم خصوصی عمومیِ میزبانی‌شده و اطلاعات تماس توسعه‌دهنده برای انتشار نهایی نیاز دارد."
+            )
+            .setPositiveButton("متوجه شدم", null)
+            .show()
     }
 
     private inner class SubtitlePreviewView(context: android.content.Context) : TextView(context) {
@@ -517,6 +535,7 @@ class MainActivity : Activity() {
         }
 
         toast("تبدیل شروع شد؛ استخراج صدا و ارسال ممکن است زمان ببرد")
+        apiKeyInput.text?.clear()
         Thread {
             var connection: HttpURLConnection? = null
             var extractedAudio: File? = null
