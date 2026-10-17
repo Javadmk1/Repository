@@ -133,10 +133,14 @@ class MainActivity : Activity() {
         when (requestCode) {
             REQUEST_PICK_MEDIA -> {
                 selectedMediaUri = data.data
-                contentResolver.takePersistableUriPermission(
-                    data.data!!,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        data.data!!,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: SecurityException) {
+                    // Some document providers do not offer persistable URI permissions.
+                }
                 selectedFileLabel.text = "فایل انتخاب‌شده: ${data.data!!.lastPathSegment ?: "فایل محلی"}"
                 toast("فایل انتخاب شد")
             }
