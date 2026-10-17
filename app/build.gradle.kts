@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.javadmk1.autosubtitle"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.javadmk1.autosubtitle"
