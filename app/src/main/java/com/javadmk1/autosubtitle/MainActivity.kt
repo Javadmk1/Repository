@@ -440,21 +440,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun findActiveCueIndex(items: List<Cue>, timeMs: Long): Int {
-        var low = 0
-        var high = items.lastIndex
-        var candidate = -1
-        while (low <= high) {
-            val mid = (low + high) ushr 1
-            if (items[mid].startMs <= timeMs) {
-                candidate = mid
-                low = mid + 1
-            } else {
-                high = mid - 1
-            }
-        }
-        return if (candidate >= 0 && timeMs < items[candidate].endMs) candidate else -1
-    }
+    private fun findActiveCueIndex(items: List<Cue>, timeMs: Long): Int =
+        SubtitleUtils.findActiveCueIndex(items, timeMs)
 
     private fun applySubtitleStyle() {
         if (!::subtitleOverlay.isInitialized) return
@@ -1076,13 +1063,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun formatTime(milliseconds: Long): String {
-        val hours = milliseconds / 3_600_000
-        val minutes = (milliseconds % 3_600_000) / 60_000
-        val seconds = (milliseconds % 60_000) / 1_000
-        val millis = milliseconds % 1_000
-        return "%02d:%02d:%02d,%03d".format(hours, minutes, seconds, millis)
-    }
+    private fun formatTime(milliseconds: Long): String = SubtitleUtils.formatTime(milliseconds)
 
     private fun makeButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
