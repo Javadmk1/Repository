@@ -16,6 +16,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
+import android.widget.MediaController
 import android.database.Cursor
 import android.provider.OpenableColumns
 import org.json.JSONObject
@@ -27,6 +29,7 @@ class MainActivity : Activity() {
 
     private val cues = mutableListOf<Cue>()
     private lateinit var selectedFileLabel: TextView
+    private lateinit var videoPreview: VideoView
     private lateinit var subtitleInput: EditText
     private lateinit var startInput: EditText
     private lateinit var endInput: EditText
@@ -70,6 +73,17 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(14))
         }
         content.addView(selectedFileLabel, matchWidth())
+
+        videoPreview = VideoView(this).apply {
+            visibility = android.view.View.GONE
+            setBackgroundColor(0xFF111111.toInt())
+            val controller = MediaController(this@MainActivity)
+            setMediaController(controller)
+            controller.setAnchorView(this)
+        }
+        content.addView(videoPreview, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(220)
+        ).apply { bottomMargin = dp(12) })
 
         content.addView(TextView(this).apply {
             text = "کلید API برای تبدیل خودکار (اختیاری؛ هزینهٔ سرویس جداست)"
@@ -173,7 +187,16 @@ class MainActivity : Activity() {
                     // Some document providers do not offer persistable URI permissions.
                 }
                 selectedFileLabel.text = "فایل انتخاب‌شده: ${data.data!!.lastPathSegment ?: "فایل محلی"}"
-                toast("فایل انتخاب شد")
+                val selectedUri = data.data!!
+                val selectedMime = contentResolver.getType(selectedUri) ?: ""
+                if (selectedMime.startsWith("video/")) {
+                    videoPreview.visibility = android.view.View.VISIBLE
+                    videoPreview.setVideoURI(selectedUri)
+                } else {
+                    videoPreview.stopPlayback()
+                    videoPreview.visibility = android.view.View.GONE
+                }
+                toast(if (selectedMime.startsWith("video/")) "ویدئو انتخاب شد؛ برای پخش از کنترل‌های ویدئو استفاده کن" else "فایل صوتی انتخاب شد")
             }
             REQUEST_EXPORT_SRT -> {
                 data.data?.let { uri -> writeSrt(uri) }
