@@ -30,4 +30,7 @@ dependencies {
     implementation("androidx.media3:media3-common:$media3Version")
     implementation("androidx.media3:media3-effect:$media3Version")
     implementation("androidx.media3:media3-transformer:$media3Version")
+
+    // Local unit tests for subtitle timing and SRT formatting.
+    testImplementation("junit:junit:4.13.2")
 }
