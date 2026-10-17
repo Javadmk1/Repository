@@ -159,7 +159,7 @@ class MainActivity : Activity() {
         previewFrame.addView(videoPreview, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(220)
         ))
-        subtitleOverlay = TextView(this).apply {
+        subtitleOverlay = SubtitlePreviewView(this).apply {
             textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
@@ -363,6 +363,36 @@ class MainActivity : Activity() {
         setContentView(scroll)
         applySubtitleStyle()
         previewHandler.post(previewTicker)
+    }
+
+    private inner class SubtitlePreviewView(context: android.content.Context) : TextView(context) {
+        override fun onDraw(canvas: Canvas) {
+            background?.draw(canvas)
+            val textLayout = this.layout ?: return
+            canvas.save()
+            canvas.translate(totalPaddingLeft.toFloat(), extendedPaddingTop.toFloat())
+            val p = paint
+            val oldStyle = p.style
+            val oldColor = p.color
+            val oldStroke = p.strokeWidth
+            p.clearShadowLayer()
+            if (outlineWidth > 0) {
+                p.style = Paint.Style.STROKE
+                p.strokeJoin = Paint.Join.ROUND
+                p.strokeWidth = dp(outlineWidth).toFloat()
+                p.color = outlineColors[outlineColorIndex.coerceIn(outlineColors.indices)]
+                textLayout.draw(canvas)
+            }
+            p.style = Paint.Style.FILL
+            p.color = currentTextColor
+            if (shadowEnabled) p.setShadowLayer(dp(3).toFloat(), 0f, dp(2).toFloat(), Color.BLACK)
+            textLayout.draw(canvas)
+            p.clearShadowLayer()
+            p.style = oldStyle
+            p.color = oldColor
+            p.strokeWidth = oldStroke
+            canvas.restore()
+        }
     }
 
     private fun applySubtitleStyle() {
