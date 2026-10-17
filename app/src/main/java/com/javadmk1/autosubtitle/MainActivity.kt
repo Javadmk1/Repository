@@ -37,7 +37,7 @@ import android.text.TextDirectionHeuristics
 import android.text.Layout
 import android.graphics.Typeface
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Effects
+import androidx.media3.transformer.Effects
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.CanvasOverlay
 import androidx.media3.effect.OverlayEffect
