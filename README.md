@@ -39,3 +39,14 @@ GitHub Actions builds a debug APK on pushes to the main branch. Open the reposit
 - Expand subtitle styling options and add an export progress indicator.
 - Improve upload progress and large-file handling.
 - Improve upload progress, large-file handling, and error messages.
+
+
+## Security and Google Play preparation
+
+- The manifest disables Android app backup and cleartext (non-HTTPS) traffic.
+- The app targets Android 16 / API 36 for current Google Play submission requirements.
+- An in-app privacy notice explains the optional upload to OpenAI; the API-key field is cleared when a transcription request begins.
+- Review `PRIVACY_POLICY.md`, replace the contact placeholder, publish the policy at a stable public HTTPS URL, and use that URL in Play Console before release.
+- This repository currently builds a **debug APK**. A public Google Play release should be built as a signed release bundle (AAB), with Play App Signing configured, and the Play Console Data safety form must accurately match the app.
+
+These steps reduce avoidable security and policy issues but do not guarantee Play Protect or Google Play approval.
