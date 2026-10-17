@@ -805,16 +805,36 @@ class MainActivity : Activity() {
         }
         val exportCues = cues.toList()
         val outputFile = File(cacheDir, "autosubtitle_export_" + System.currentTimeMillis() + ".mp4")
+        val exportSizeSp = subtitleSizeSp
+        val exportPosition = subtitlePosition
+        val exportOutlineWidth = outlineWidth
+        val exportOpacity = backgroundOpacity
+        val exportFontIndex = fontIndex
+        val exportTextColor = textColors[textColorIndex.coerceIn(textColors.indices)]
+        val exportOutlineColor = outlineColors[outlineColorIndex.coerceIn(outlineColors.indices)]
+        val exportBoxColor = boxColors[boxColorIndex.coerceIn(boxColors.indices)]
+        val exportBold = isBold
+        val exportShadow = shadowEnabled
+        val exportBox = boxEnabled
         toast("پردازش ویدئو شروع شد؛ برنامه را باز نگه دار")
         try {
             val overlay = object : CanvasOverlay(true) {
                 private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = android.graphics.Color.WHITE
-                    typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                    color = exportTextColor
+                    typeface = Typeface.create(fontNames[exportFontIndex.coerceIn(fontNames.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
                     textAlign = Paint.Align.CENTER
                 }
+                private val outlinePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = exportOutlineColor
+                    typeface = Typeface.create(fontNames[exportFontIndex.coerceIn(fontNames.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
+                    textAlign = Paint.Align.CENTER
+                    style = Paint.Style.STROKE
+                    strokeJoin = Paint.Join.ROUND
+                    strokeWidth = exportOutlineWidth * 1.5f
+                }
                 private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xCC000000.toInt()
+                    val alpha = (exportOpacity * 255 / 100).coerceIn(0, 255)
+                    color = if (exportBox && exportBoxColor != Color.TRANSPARENT) Color.argb(alpha, Color.red(exportBoxColor), Color.green(exportBoxColor), Color.blue(exportBoxColor)) else Color.TRANSPARENT
                     style = Paint.Style.FILL
                 }
 
@@ -826,9 +846,18 @@ class MainActivity : Activity() {
                     val width = canvas.width.toFloat()
                     val height = canvas.height.toFloat()
                     val maxTextWidth = (width * 0.88f).toInt().coerceAtLeast(1)
-                    textPaint.textSize = (height * 0.045f).coerceIn(24f, 64f)
+                    textPaint.textSize = (height * 0.045f * exportSizeSp / 19f).coerceIn(18f, 100f)
+                    outlinePaint.textSize = textPaint.textSize
+                    if (exportShadow) textPaint.setShadowLayer(height * 0.003f, 0f, height * 0.002f, Color.BLACK)
+                    else textPaint.clearShadowLayer()
                     val layout = StaticLayout.Builder.obtain(
                         active.text, 0, active.text.length, textPaint, maxTextWidth
+                    ).setAlignment(Layout.Alignment.ALIGN_CENTER)
+                        .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
+                        .setIncludePad(false)
+                        .build()
+                    val outlineLayout = StaticLayout.Builder.obtain(
+                        active.text, 0, active.text.length, outlinePaint, maxTextWidth
                     ).setAlignment(Layout.Alignment.ALIGN_CENTER)
                         .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
                         .setIncludePad(false)
@@ -836,15 +865,18 @@ class MainActivity : Activity() {
                     val horizontalPadding = width * 0.025f
                     val verticalPadding = height * 0.012f
                     val blockHeight = layout.height + verticalPadding * 2
-                    val top = height * 0.88f - blockHeight
+                    val top = (height - blockHeight) * exportPosition / 100f
                     val left = (width - layout.width) / 2f - horizontalPadding
                     val right = (width + layout.width) / 2f + horizontalPadding
-                    canvas.drawRoundRect(
-                        RectF(left, top, right, top + blockHeight),
-                        height * 0.012f, height * 0.012f, backgroundPaint
-                    )
+                    if (exportBox && exportBoxColor != Color.TRANSPARENT) {
+                        canvas.drawRoundRect(
+                            RectF(left, top, right, top + blockHeight),
+                            height * 0.012f, height * 0.012f, backgroundPaint
+                        )
+                    }
                     canvas.save()
                     canvas.translate((width - layout.width) / 2f, top + verticalPadding)
+                    if (exportOutlineWidth > 0) outlineLayout.draw(canvas)
                     layout.draw(canvas)
                     canvas.restore()
                 }
