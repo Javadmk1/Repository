@@ -384,6 +384,13 @@ class MainActivity : Activity() {
                 "از ارسال فایل‌های حساس یا متعلق به دیگران بدون اجازه خودداری کن. " +
                 "این نسخه هنوز به سیاست حریم خصوصی عمومیِ میزبانی‌شده و اطلاعات تماس توسعه‌دهنده برای انتشار نهایی نیاز دارد."
             )
+            .setNeutralButton("سیاست حریم خصوصی کامل") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Javadmk1/Repository/blob/main/PRIVACY_POLICY.md")))
+                } catch (_: Exception) {
+                    toast("برای مشاهدهٔ سیاست حریم خصوصی، مخزن عمومی پروژه را باز کن")
+                }
+            }
             .setPositiveButton("متوجه شدم", null)
             .show()
     }
