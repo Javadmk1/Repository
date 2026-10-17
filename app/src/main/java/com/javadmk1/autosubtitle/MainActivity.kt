@@ -91,13 +91,16 @@ class MainActivity : Activity() {
     private val previewTicker = object : Runnable {
         override fun run() {
             if (::videoPreview.isInitialized && ::subtitleOverlay.isInitialized &&
-                videoPreview.visibility == android.view.View.VISIBLE && videoPreview.isPlaying
+                videoPreview.visibility == android.view.View.VISIBLE && selectedMediaUri != null
             ) {
-                val position = videoPreview.currentPosition.toLong()
-                val activeCue = cues.firstOrNull { position >= it.startMs && position < it.endMs }
-                subtitleOverlay.text = activeCue?.text.orEmpty()
-                subtitleOverlay.visibility = if (activeCue == null) android.view.View.GONE else android.view.View.VISIBLE
-            } else if (::subtitleOverlay.isInitialized) {
+                val cueIndex = findActiveCueIndex(cues, videoPreview.currentPosition.toLong())
+                if (cueIndex != lastPreviewCueIndex) {
+                    lastPreviewCueIndex = cueIndex
+                    subtitleOverlay.text = if (cueIndex >= 0) cues[cueIndex].text else ""
+                    subtitleOverlay.visibility = if (cueIndex >= 0) android.view.View.VISIBLE else android.view.View.GONE
+                }
+            } else if (::subtitleOverlay.isInitialized && subtitleOverlay.visibility != android.view.View.GONE) {
+                lastPreviewCueIndex = -1
                 subtitleOverlay.visibility = android.view.View.GONE
             }
             previewHandler.postDelayed(this, 200)
@@ -109,6 +112,7 @@ class MainActivity : Activity() {
     private lateinit var cueList: LinearLayout
     private lateinit var addCueButton: Button
     private var editingCueIndex: Int? = null
+    private var lastPreviewCueIndex: Int = Int.MIN_VALUE
     private lateinit var apiKeyInput: EditText
     private var selectedMediaUri: Uri? = null
 
@@ -395,6 +399,22 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun findActiveCueIndex(items: List<Cue>, timeMs: Long): Int {
+        var low = 0
+        var high = items.lastIndex
+        var candidate = -1
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            if (items[mid].startMs <= timeMs) {
+                candidate = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return if (candidate >= 0 && timeMs < items[candidate].endMs) candidate else -1
+    }
+
     private fun applySubtitleStyle() {
         if (!::subtitleOverlay.isInitialized) return
         subtitleOverlay.textSize = subtitleSizeSp.toFloat()
@@ -674,6 +694,7 @@ class MainActivity : Activity() {
     }
 
     private fun refreshCueList() {
+        lastPreviewCueIndex = Int.MIN_VALUE
         cueList.removeAllViews()
         if (cues.isEmpty()) {
             cueList.addView(TextView(this).apply {
@@ -867,44 +888,57 @@ class MainActivity : Activity() {
                     style = Paint.Style.FILL
                 }
 
+                private var cachedCueIndex = Int.MIN_VALUE
+                private var cachedLayout: StaticLayout? = null
+                private var cachedOutlineLayout: StaticLayout? = null
+                private var cachedBlockHeight = 0f
+                private var cachedHorizontalPadding = 0f
+                private var cachedVerticalPadding = 0f
+                private var cachedTextWidth = 0
+
                 override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
-                    val active = exportCues.firstOrNull {
-                        presentationTimeUs / 1000 >= it.startMs && presentationTimeUs / 1000 < it.endMs
-                    }
-                    if (active == null || active.text.isBlank()) return
+                    val cueIndex = findActiveCueIndex(exportCues, presentationTimeUs / 1000)
+                    if (cueIndex < 0 || exportCues[cueIndex].text.isBlank()) return
+                    val active = exportCues[cueIndex]
                     val width = canvas.width.toFloat()
                     val height = canvas.height.toFloat()
                     val maxTextWidth = (width * 0.88f).toInt().coerceAtLeast(1)
-                    textPaint.textSize = (height * 0.045f * exportSizeSp / 19f).coerceIn(18f, 100f)
-                    outlinePaint.textSize = textPaint.textSize
-                    if (exportShadow) textPaint.setShadowLayer(height * 0.003f, 0f, height * 0.002f, Color.BLACK)
-                    else textPaint.clearShadowLayer()
-                    val layout = StaticLayout.Builder.obtain(
-                        active.text, 0, active.text.length, textPaint, maxTextWidth
-                    ).setAlignment(Layout.Alignment.ALIGN_CENTER)
-                        .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
-                        .setIncludePad(false)
-                        .build()
-                    val outlineLayout = StaticLayout.Builder.obtain(
-                        active.text, 0, active.text.length, outlinePaint, maxTextWidth
-                    ).setAlignment(Layout.Alignment.ALIGN_CENTER)
-                        .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
-                        .setIncludePad(false)
-                        .build()
-                    val horizontalPadding = width * 0.025f
-                    val verticalPadding = height * 0.012f
-                    val blockHeight = layout.height + verticalPadding * 2
-                    val top = (height - blockHeight) * exportPosition / 100f
-                    val left = (width - layout.width) / 2f - horizontalPadding
-                    val right = (width + layout.width) / 2f + horizontalPadding
+                    if (cueIndex != cachedCueIndex || cachedTextWidth != maxTextWidth) {
+                        textPaint.textSize = (height * 0.045f * exportSizeSp / 19f).coerceIn(18f, 100f)
+                        outlinePaint.textSize = textPaint.textSize
+                        if (exportShadow) textPaint.setShadowLayer(height * 0.003f, 0f, height * 0.002f, Color.BLACK)
+                        else textPaint.clearShadowLayer()
+                        cachedLayout = StaticLayout.Builder.obtain(
+                            active.text, 0, active.text.length, textPaint, maxTextWidth
+                        ).setAlignment(Layout.Alignment.ALIGN_CENTER)
+                            .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
+                            .setIncludePad(false)
+                            .build()
+                        cachedOutlineLayout = StaticLayout.Builder.obtain(
+                            active.text, 0, active.text.length, outlinePaint, maxTextWidth
+                        ).setAlignment(Layout.Alignment.ALIGN_CENTER)
+                            .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
+                            .setIncludePad(false)
+                            .build()
+                        cachedHorizontalPadding = width * 0.025f
+                        cachedVerticalPadding = height * 0.012f
+                        cachedBlockHeight = (cachedLayout?.height ?: 0) + cachedVerticalPadding * 2
+                        cachedTextWidth = maxTextWidth
+                        cachedCueIndex = cueIndex
+                    }
+                    val layout = cachedLayout ?: return
+                    val outlineLayout = cachedOutlineLayout ?: return
+                    val top = (height - cachedBlockHeight) * exportPosition / 100f
+                    val left = (width - layout.width) / 2f - cachedHorizontalPadding
+                    val right = (width + layout.width) / 2f + cachedHorizontalPadding
                     if (exportBox && exportBoxColor != Color.TRANSPARENT) {
                         canvas.drawRoundRect(
-                            RectF(left, top, right, top + blockHeight),
+                            RectF(left, top, right, top + cachedBlockHeight),
                             height * 0.012f, height * 0.012f, backgroundPaint
                         )
                     }
                     canvas.save()
-                    canvas.translate((width - layout.width) / 2f, top + verticalPadding)
+                    canvas.translate((width - layout.width) / 2f, top + cachedVerticalPadding)
                     if (exportOutlineWidth > 0) outlineLayout.draw(canvas)
                     layout.draw(canvas)
                     canvas.restore()
