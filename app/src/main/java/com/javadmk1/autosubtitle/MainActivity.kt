@@ -140,7 +140,7 @@ class MainActivity : Activity() {
         }, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "نسخهٔ اولیه: انتخاب فایل و ساخت زیرنویس SRT"
+            text = "نسخه 0.3.0 · زیرنویس خودکار، ویرایش زمان‌بندی و خروجی ویدئو"
             textSize = 16f
             setPadding(0, dp(6), 0, dp(16))
         }, matchWidth())
