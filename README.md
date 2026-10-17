@@ -8,11 +8,11 @@ An Android subtitle app with a Persian-first interface.
 - Create and edit subtitle cues manually.
 - Export UTF-8 SubRip (SRT) subtitle files.
 - Optional automatic transcription of selected audio files through the OpenAI Whisper transcription API.
-- Importing video directly for automatic transcription is not supported yet; select an audio file for the current transcription feature.
+- Extract the audio track from selected videos (when the device can demux the format), then transcribe it through Whisper.
 
 ## Automatic transcription setup
 
-1. Open the app and select an audio file.
+1. Open the app and select an audio or video file.
 2. Enter your own OpenAI API key in the password field.
 3. Tap the automatic transcription button and wait for the timestamped segments.
 4. Export the result as an SRT file.
@@ -31,7 +31,6 @@ GitHub Actions builds a debug APK on pushes to the main branch. Open the reposit
 
 ## Planned improvements
 
-- Extract audio from video files before transcription.
-- Add subtitle preview, cue editing/deletion, and better RTL/Persian text handling.
 - Add optional subtitle burn-in/export to MP4.
+- Add subtitle preview, cue editing/deletion, and better RTL/Persian text handling.
 - Improve upload progress, large-file handling, and error messages.
