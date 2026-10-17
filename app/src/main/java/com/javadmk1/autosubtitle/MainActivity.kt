@@ -475,6 +475,19 @@ class MainActivity : Activity() {
                 gravity = Gravity.END
             }
             actions.addView(Button(this).apply {
+                text = "پخش از اینجا"
+                setOnClickListener {
+                    if (selectedMediaUri == null || !::videoPreview.isInitialized ||
+                        videoPreview.visibility != android.view.View.VISIBLE
+                    ) {
+                        toast("ابتدا یک ویدئو انتخاب کن")
+                    } else {
+                        videoPreview.seekTo(cue.startMs.toInt())
+                        videoPreview.start()
+                    }
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            actions.addView(Button(this).apply {
                 text = "ویرایش"
                 setOnClickListener {
                     editingCueIndex = index
