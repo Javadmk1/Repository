@@ -394,7 +394,7 @@ class MainActivity : Activity() {
                 setBackgroundColor(0xFFF1F3F5.toInt())
             }
             item.addView(TextView(this).apply {
-                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "\\n" + cue.text
+                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "\n" + cue.text
                 textSize = 14f
             }, matchWidth())
             val actions = LinearLayout(this).apply {
