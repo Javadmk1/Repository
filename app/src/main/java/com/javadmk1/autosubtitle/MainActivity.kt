@@ -280,6 +280,21 @@ class MainActivity : Activity() {
         }
         content.addView(endInput, matchWidth())
 
+        val timeAssistRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        timeAssistRow.addView(makeButton("شروع از زمان ویدئو") { setCueTimeFromVideo(true) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(4) })
+        timeAssistRow.addView(makeButton("پایان از زمان ویدئو") { setCueTimeFromVideo(false) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(4) })
+        content.addView(timeAssistRow, matchWidth())
+        content.addView(TextView(this).apply {
+            text = "برای ثبت دقیق‌تر زمان، ویدئو را پخش یا روی نقطهٔ دلخواه مکث کن و دکمهٔ شروع یا پایان را بزن."
+            textSize = 12f
+            setPadding(0, 0, 0, dp(8))
+        }, matchWidth())
+
         addCueButton = makeButton("افزودن زیرنویس") { addCue() }
         content.addView(addCueButton, matchWidth())
         content.addView(makeButton("وارد کردن فایل زیرنویس SRT") { importSrtFile() }, matchWidth())
@@ -702,6 +717,32 @@ class MainActivity : Activity() {
             if (index >= 0 && it.moveToFirst()) name = it.getString(index) ?: name
         }
         return name
+    }
+
+    private fun setCueTimeFromVideo(isStart: Boolean) {
+        if (selectedMediaUri == null || !::videoPreview.isInitialized ||
+            videoPreview.visibility != android.view.View.VISIBLE
+        ) {
+            toast("ابتدا یک ویدئو انتخاب کن")
+            return
+        }
+        val seconds = videoPreview.currentPosition.coerceAtLeast(0) / 1000.0
+        val formatted = String.format(java.util.Locale.US, "%.3f", seconds)
+        if (isStart) {
+            startInput.setText(formatted)
+            val end = endInput.text.toString().trim().replace(',', '.').toDoubleOrNull()
+            if (end == null || end <= seconds) {
+                endInput.setText(String.format(java.util.Locale.US, "%.3f", seconds + 2.0))
+            }
+            toast("زمان شروع از موقعیت فعلی ویدئو تنظیم شد")
+        } else {
+            endInput.setText(formatted)
+            val start = startInput.text.toString().trim().replace(',', '.').toDoubleOrNull()
+            if (start == null || start >= seconds) {
+                startInput.setText(String.format(java.util.Locale.US, "%.3f", (seconds - 2.0).coerceAtLeast(0.0)))
+            }
+            toast("زمان پایان از موقعیت فعلی ویدئو تنظیم شد")
+        }
     }
 
     private fun addCue() {
