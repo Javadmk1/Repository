@@ -12,6 +12,11 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.database.Cursor
+import android.provider.OpenableColumns
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : Activity() {
     private data class Cue(val startMs: Long, val endMs: Long, val text: String)
@@ -22,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var startInput: EditText
     private lateinit var endInput: EditText
     private lateinit var cueList: TextView
+    private lateinit var apiKeyInput: EditText
     private var selectedMediaUri: Uri? = null
 
     companion object {
@@ -57,6 +63,23 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(14))
         }
         content.addView(selectedFileLabel, matchWidth())
+
+        content.addView(TextView(this).apply {
+            text = "کلید API برای تبدیل خودکار (اختیاری؛ هزینهٔ سرویس جداست)"
+            textSize = 14f
+        }, matchWidth())
+        apiKeyInput = EditText(this).apply {
+            hint = "کلید API خودت را وارد کن؛ در برنامه ذخیره نمی‌شود"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        content.addView(apiKeyInput, matchWidth())
+        content.addView(makeButton("تبدیل خودکار فایل صوتی به زیرنویس") { transcribeAudioFile() }, matchWidth())
+        content.addView(TextView(this).apply {
+            text = "تبدیل خودکار در این نسخه با سرویس آنلاین Whisper انجام می‌شود؛ اینترنت و کلید API معتبر لازم است. فایل صوتی باید در محدودهٔ مجاز سرویس باشد. فایل ویدئو مستقیماً برای این قابلیت پشتیبانی نمی‌شود."
+            textSize = 12f
+            setPadding(0, dp(2), 0, dp(12))
+        }, matchWidth())
 
         content.addView(TextView(this).apply {
             text = "متن زیرنویس"
@@ -148,6 +171,115 @@ class MainActivity : Activity() {
                 data.data?.let { uri -> writeSrt(uri) }
             }
         }
+    }
+
+
+    private fun transcribeAudioFile() {
+        val uri = selectedMediaUri
+        val apiKey = apiKeyInput.text.toString().trim()
+        if (uri == null) {
+            toast("ابتدا یک فایل صوتی انتخاب کن")
+            return
+        }
+        if (apiKey.isEmpty()) {
+            toast("برای تبدیل خودکار، کلید API معتبر وارد کن")
+            return
+        }
+        val mime = contentResolver.getType(uri) ?: ""
+        if (!mime.startsWith("audio/")) {
+            toast("این قابلیت فعلاً فایل صوتی را می‌پذیرد، نه ویدئو")
+            return
+        }
+
+        toast("تبدیل شروع شد؛ برای فایل‌های طولانی صبر کن")
+        Thread {
+            var connection: HttpURLConnection? = null
+            try {
+                val boundary = "----AutoSubtitleBoundary" + System.currentTimeMillis()
+                connection = (URL("https://api.openai.com/v1/audio/transcriptions").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 30000
+                    readTimeout = 180000
+                    doOutput = true
+                    setRequestProperty("Authorization", "Bearer $apiKey")
+                    setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                    setChunkedStreamingMode(64 * 1024)
+                }
+
+                connection.outputStream.use { out ->
+                    fun field(name: String, value: String) {
+                        out.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
+                        out.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray(Charsets.UTF_8))
+                        out.write(value.toByteArray(Charsets.UTF_8))
+                        out.write("\r\n".toByteArray(Charsets.UTF_8))
+                    }
+                    field("model", "whisper-1")
+                    field("response_format", "verbose_json")
+                    field("timestamp_granularities[]", "segment")
+                    val filename = getDisplayName(uri).replace("\"", "_")
+                    out.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
+                    out.write("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n".toByteArray(Charsets.UTF_8))
+                    val contentType = if (mime.isNotBlank()) mime else "application/octet-stream"
+                    out.write("Content-Type: $contentType\r\n\r\n".toByteArray(Charsets.UTF_8))
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        input.copyTo(out, 64 * 1024)
+                    } ?: throw IllegalStateException("فایل قابل خواندن نیست")
+                    out.write("\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8))
+                }
+
+                val status = connection.responseCode
+                val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                if (status !in 200..299) {
+                    val message = try { JSONObject(response).optJSONObject("error")?.optString("message") ?: response }
+                    catch (_: Exception) { response }
+                    throw IllegalStateException("خطای سرویس ($status): $message")
+                }
+
+                val json = JSONObject(response)
+                val segments = json.optJSONArray("segments")
+                val newCues = mutableListOf<Cue>()
+                if (segments != null) {
+                    for (i in 0 until segments.length()) {
+                        val segment = segments.optJSONObject(i) ?: continue
+                        val text = segment.optString("text").trim()
+                        val start = (segment.optDouble("start", 0.0) * 1000).toLong().coerceAtLeast(0)
+                        val end = (segment.optDouble("end", 0.0) * 1000).toLong()
+                        if (text.isNotEmpty() && end > start) newCues.add(Cue(start, end, text))
+                    }
+                }
+                if (newCues.isEmpty()) {
+                    val text = json.optString("text").trim()
+                    if (text.isNotEmpty()) newCues.add(Cue(0, 5000, text))
+                }
+                runOnUiThread {
+                    if (newCues.isEmpty()) {
+                        toast("متنی از فایل تشخیص داده نشد")
+                    } else {
+                        cues.clear()
+                        cues.addAll(newCues)
+                        refreshCueList()
+                        toast("تبدیل تمام شد: " + newCues.size + " بخش زیرنویس")
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    toast(error.message?.take(220) ?: "تبدیل انجام نشد؛ اتصال و کلید API را بررسی کن")
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }.start()
+    }
+
+    private fun getDisplayName(uri: Uri): String {
+        var name = "audio_file"
+        val cursor: Cursor? = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && it.moveToFirst()) name = it.getString(index) ?: name
+        }
+        return name
     }
 
     private fun addCue() {
