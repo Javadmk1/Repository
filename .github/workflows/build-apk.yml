@@ -5,12 +5,17 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: autosubtitle-build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
