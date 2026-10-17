@@ -30,7 +30,9 @@ class MainActivity : Activity() {
     private lateinit var subtitleInput: EditText
     private lateinit var startInput: EditText
     private lateinit var endInput: EditText
-    private lateinit var cueList: TextView
+    private lateinit var cueList: LinearLayout
+    private lateinit var addCueButton: Button
+    private var editingCueIndex: Int? = null
     private lateinit var apiKeyInput: EditText
     private var selectedMediaUri: Uri? = null
 
@@ -119,7 +121,8 @@ class MainActivity : Activity() {
         }
         content.addView(endInput, matchWidth())
 
-        content.addView(makeButton("افزودن زیرنویس") { addCue() }, matchWidth())
+        addCueButton = makeButton("افزودن زیرنویس") { addCue() }
+        content.addView(addCueButton, matchWidth())
         content.addView(makeButton("خروجی گرفتن فایل SRT") { exportSrt() }, matchWidth())
 
         content.addView(TextView(this).apply {
@@ -127,10 +130,9 @@ class MainActivity : Activity() {
             textSize = 18f
             setPadding(0, dp(18), 0, dp(8))
         }, matchWidth())
-        cueList = TextView(this).apply {
-            text = "هنوز زیرنویسی اضافه نشده است."
-            textSize = 14f
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+        cueList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         content.addView(cueList, matchWidth())
 
@@ -358,23 +360,79 @@ class MainActivity : Activity() {
             return
         }
 
-        cues.add(Cue((startSeconds * 1000).toLong(), (endSeconds * 1000).toLong(), text))
+        val cue = Cue((startSeconds * 1000).toLong(), (endSeconds * 1000).toLong(), text)
+        val editIndex = editingCueIndex
+        if (editIndex != null && editIndex in cues.indices) {
+            cues[editIndex] = cue
+            editingCueIndex = null
+            addCueButton.text = "افزودن زیرنویس"
+            toast("تغییرات زیرنویس ذخیره شد")
+        } else {
+            cues.add(cue)
+            toast("زیرنویس اضافه شد")
+        }
         cues.sortBy { it.startMs }
         subtitleInput.text.clear()
         refreshCueList()
-        toast("زیرنویس اضافه شد")
     }
 
     private fun refreshCueList() {
-        cueList.text = if (cues.isEmpty()) {
-            "هنوز زیرنویسی اضافه نشده است."
-        } else {
-            cues.mapIndexed { index, cue ->
-                "${index + 1}. ${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}\n${cue.text}"
-            }.joinToString("\n\n")
+        cueList.removeAllViews()
+        if (cues.isEmpty()) {
+            cueList.addView(TextView(this).apply {
+                text = "هنوز زیرنویسی اضافه نشده است."
+                textSize = 14f
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+            }, matchWidth())
+            return
+        }
+
+        cues.forEachIndexed { index, cue ->
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setBackgroundColor(0xFFF1F3F5.toInt())
+            }
+            item.addView(TextView(this).apply {
+                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "\\n" + cue.text
+                textSize = 14f
+            }, matchWidth())
+            val actions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END
+            }
+            actions.addView(Button(this).apply {
+                text = "ویرایش"
+                setOnClickListener {
+                    editingCueIndex = index
+                    subtitleInput.setText(cue.text)
+                    startInput.setText((cue.startMs / 1000.0).toString())
+                    endInput.setText((cue.endMs / 1000.0).toString())
+                    addCueButton.text = "ذخیره تغییرات"
+                    toast("متن یا زمان را تغییر بده و ذخیره تغییرات را بزن")
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            actions.addView(Button(this).apply {
+                text = "حذف"
+                setOnClickListener {
+                    cues.removeAt(index)
+                    if (editingCueIndex == index) {
+                        editingCueIndex = null
+                        addCueButton.text = "افزودن زیرنویس"
+                    } else if (editingCueIndex != null && editingCueIndex!! > index) {
+                        editingCueIndex = editingCueIndex!! - 1
+                    }
+                    refreshCueList()
+                    toast("زیرنویس حذف شد")
+                }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            item.addView(actions, matchWidth())
+            cueList.addView(item, matchWidth())
+            cueList.addView(android.view.View(this).apply {
+                setBackgroundColor(0xFFD5D9DE.toInt())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         }
     }
-
     private fun exportSrt() {
         if (cues.isEmpty()) {
             toast("برای خروجی گرفتن، ابتدا یک زیرنویس اضافه کن")
