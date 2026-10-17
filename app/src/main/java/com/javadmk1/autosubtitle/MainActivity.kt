@@ -97,7 +97,6 @@ class MainActivity : Activity() {
                 val activeCue = cues.firstOrNull { position >= it.startMs && position < it.endMs }
                 subtitleOverlay.text = activeCue?.text.orEmpty()
                 subtitleOverlay.visibility = if (activeCue == null) android.view.View.GONE else android.view.View.VISIBLE
-                applySubtitleStyle()
             } else if (::subtitleOverlay.isInitialized) {
                 subtitleOverlay.visibility = android.view.View.GONE
             }
