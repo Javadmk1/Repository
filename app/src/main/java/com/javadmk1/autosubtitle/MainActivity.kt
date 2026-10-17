@@ -3,6 +3,10 @@ package com.javadmk1.autosubtitle
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
+import java.io.File
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -76,7 +80,7 @@ class MainActivity : Activity() {
         content.addView(apiKeyInput, matchWidth())
         content.addView(makeButton("تبدیل خودکار فایل صوتی به زیرنویس") { transcribeAudioFile() }, matchWidth())
         content.addView(TextView(this).apply {
-            text = "تبدیل خودکار در این نسخه با سرویس آنلاین Whisper انجام می‌شود؛ اینترنت و کلید API معتبر لازم است. فایل صوتی باید در محدودهٔ مجاز سرویس باشد. فایل ویدئو مستقیماً برای این قابلیت پشتیبانی نمی‌شود."
+            text = "تبدیل با سرویس آنلاین Whisper انجام می‌شود. فایل صوتی یا ویدئو انتخاب کن؛ در ویدئو، صدای آن استخراج و ارسال می‌شود. اینترنت، کلید API معتبر و رعایت محدودیت حجم سرویس لازم است."
             textSize = 12f
             setPadding(0, dp(2), 0, dp(12))
         }, matchWidth())
@@ -131,7 +135,7 @@ class MainActivity : Activity() {
         content.addView(cueList, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "توجه: تشخیص خودکار گفتار و تبدیل نهایی ویدئو به MP4 در این نسخه پیاده‌سازی نشده است."
+            text = "نکته: این نسخه زیرنویس SRT می‌سازد؛ چسباندن زیرنویس روی تصویر و خروجی MP4 هنوز اضافه نشده است."
             textSize = 13f
             setPadding(0, dp(16), 0, dp(8))
         }, matchWidth())
@@ -186,15 +190,20 @@ class MainActivity : Activity() {
             return
         }
         val mime = contentResolver.getType(uri) ?: ""
-        if (!mime.startsWith("audio/")) {
-            toast("این قابلیت فعلاً فایل صوتی را می‌پذیرد، نه ویدئو")
+        if (!mime.startsWith("audio/") && !mime.startsWith("video/")) {
+            toast("این نوع فایل صوتی یا ویدئویی پشتیبانی نمی‌شود")
             return
         }
 
-        toast("تبدیل شروع شد؛ برای فایل‌های طولانی صبر کن")
+        toast("تبدیل شروع شد؛ استخراج صدا و ارسال ممکن است زمان ببرد")
         Thread {
             var connection: HttpURLConnection? = null
+            var extractedAudio: File? = null
             try {
+                val audioFile = if (mime.startsWith("video/")) {
+                    extractedAudio = extractAudioTrack(uri)
+                    extractedAudio!!
+                } else null
                 val boundary = "----AutoSubtitleBoundary" + System.currentTimeMillis()
                 connection = (URL("https://api.openai.com/v1/audio/transcriptions").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
@@ -216,14 +225,18 @@ class MainActivity : Activity() {
                     field("model", "whisper-1")
                     field("response_format", "verbose_json")
                     field("timestamp_granularities[]", "segment")
-                    val filename = getDisplayName(uri).replace("\"", "_")
+                    val filename = if (audioFile != null) "extracted_audio.m4a" else getDisplayName(uri).replace("\"", "_")
+                    val uploadMime = if (audioFile != null) "audio/mp4" else mime
                     out.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
                     out.write("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n".toByteArray(Charsets.UTF_8))
-                    val contentType = if (mime.isNotBlank()) mime else "application/octet-stream"
-                    out.write("Content-Type: $contentType\r\n\r\n".toByteArray(Charsets.UTF_8))
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        input.copyTo(out, 64 * 1024)
-                    } ?: throw IllegalStateException("فایل قابل خواندن نیست")
+                    out.write("Content-Type: $uploadMime\r\n\r\n".toByteArray(Charsets.UTF_8))
+                    if (audioFile != null) {
+                        audioFile.inputStream().use { it.copyTo(out, 64 * 1024) }
+                    } else {
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            input.copyTo(out, 64 * 1024)
+                        } ?: throw IllegalStateException("فایل قابل خواندن نیست")
+                    }
                     out.write("\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8))
                 }
 
@@ -268,8 +281,57 @@ class MainActivity : Activity() {
                 }
             } finally {
                 connection?.disconnect()
+                extractedAudio?.delete()
             }
         }.start()
+    }
+
+    private fun extractAudioTrack(uri: Uri): File {
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        val output = File(cacheDir, "autosub_audio_" + System.currentTimeMillis() + ".m4a")
+        try {
+            extractor.setDataSource(this, uri, null)
+            var audioTrack = -1
+            var audioFormat: MediaFormat? = null
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val trackMime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (trackMime.startsWith("audio/")) {
+                    audioTrack = i
+                    audioFormat = format
+                    break
+                }
+            }
+            if (audioTrack < 0 || audioFormat == null) {
+                throw IllegalStateException("در این ویدئو ترک صوتی پیدا نشد")
+            }
+            extractor.selectTrack(audioTrack)
+            muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val outputTrack = muxer.addTrack(audioFormat)
+            muxer.start()
+            val buffer = java.nio.ByteBuffer.allocateDirect(1024 * 1024)
+            val info = android.media.MediaCodec.BufferInfo()
+            while (true) {
+                buffer.clear()
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+                info.offset = 0
+                info.size = size
+                info.presentationTimeUs = extractor.sampleTime
+                info.flags = extractor.sampleFlags
+                muxer.writeSampleData(outputTrack, buffer, info)
+                if (!extractor.advance()) break
+            }
+            muxer.stop()
+            return output
+        } catch (e: Exception) {
+            output.delete()
+            throw IllegalStateException("استخراج صدا ناموفق بود: " + (e.message ?: "فرمت پشتیبانی‌نشده"))
+        } finally {
+            try { muxer?.release() } catch (_: Exception) {}
+            extractor.release()
+        }
     }
 
     private fun getDisplayName(uri: Uri): String {
