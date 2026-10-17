@@ -29,15 +29,18 @@ Important:
 - Provider limits apply to file size, formats, and duration.
 - This is a debug/MVP build, not a production-ready release.
 
-## Build
+## Build and dependencies
 
-GitHub Actions builds a debug APK on pushes to the main branch. Open the repository's Actions tab and download the APK artifact from a successful run.
+- Gradle downloads the required AndroidX Media3 libraries and JUnit automatically during CI; no manual library installation on the phone is needed.
+- GitHub Actions runs local unit tests, Android lint checks, and then builds the debug APK on pushes to the main branch.
+- Open the repository's Actions tab and download the AutoSubtitle-debug artifact from a successful run.
+- Subtitle timing lookup and SRT timestamp formatting have unit tests in app/src/test.
+- The current pipeline produces a debug APK only. Release signing is intentionally not configured until a private upload key is securely set up.
 
 ## Planned improvements
 
 - Improve export progress, cancellation, and compatibility for more video formats.
 - Expand subtitle styling options and add an export progress indicator.
-- Improve upload progress and large-file handling.
 - Improve upload progress, large-file handling, and error messages.
 
 
