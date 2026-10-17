@@ -23,6 +23,24 @@ import android.widget.VideoView
 import android.widget.MediaController
 import android.database.Cursor
 import android.provider.OpenableColumns
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextDirectionHeuristics
+import android.text.Layout
+import android.graphics.Typeface
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Effects
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.CanvasOverlay
+import androidx.media3.effect.OverlayEffect
+import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.ExportException
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -63,6 +81,7 @@ class MainActivity : Activity() {
         private const val REQUEST_PICK_MEDIA = 100
         private const val REQUEST_EXPORT_SRT = 101
         private const val REQUEST_IMPORT_SRT = 102
+        private const val REQUEST_EXPORT_MP4 = 103
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -176,6 +195,7 @@ class MainActivity : Activity() {
         content.addView(addCueButton, matchWidth())
         content.addView(makeButton("وارد کردن فایل زیرنویس SRT") { importSrtFile() }, matchWidth())
         content.addView(makeButton("خروجی گرفتن فایل SRT") { exportSrt() }, matchWidth())
+        content.addView(makeButton("ساخت ویدئوی MP4 با زیرنویس چسبیده") { requestBurnInExport() }, matchWidth())
 
         content.addView(TextView(this).apply {
             text = "زیرنویس‌های ثبت‌شده"
@@ -189,7 +209,7 @@ class MainActivity : Activity() {
         content.addView(cueList, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "نکته: این نسخه زیرنویس SRT می‌سازد؛ چسباندن زیرنویس روی تصویر و خروجی MP4 هنوز اضافه نشده است."
+            text = "خروجی MP4 با زیرنویس چسبیده، ویدئو را دوباره پردازش می‌کند و ممکن است بسته به طول و کیفیت ویدئو زمان‌بر باشد. فایل اصلی تغییر نمی‌کند."
             textSize = 13f
             setPadding(0, dp(16), 0, dp(8))
         }, matchWidth())
@@ -248,6 +268,9 @@ class MainActivity : Activity() {
             }
             REQUEST_IMPORT_SRT -> {
                 data.data?.let { uri -> readSrt(uri) }
+            }
+            REQUEST_EXPORT_MP4 -> {
+                data.data?.let { uri -> exportVideoWithBurnedSubtitles(uri) }
             }
         }
     }
@@ -581,6 +604,114 @@ class MainActivity : Activity() {
             putExtra(Intent.EXTRA_TITLE, "subtitles.srt")
         }
         startActivityForResult(intent, REQUEST_EXPORT_SRT)
+    }
+
+    private fun requestBurnInExport() {
+        val uri = selectedMediaUri
+        if (uri == null || !(contentResolver.getType(uri) ?: "").startsWith("video/")) {
+            toast("ابتدا یک ویدئو انتخاب کن")
+            return
+        }
+        if (cues.isEmpty()) {
+            toast("ابتدا زیرنویس بساز یا فایل SRT وارد کن")
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "video/mp4"
+            putExtra(Intent.EXTRA_TITLE, "autosubtitle.mp4")
+        }
+        startActivityForResult(intent, REQUEST_EXPORT_MP4)
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun exportVideoWithBurnedSubtitles(destinationUri: Uri) {
+        val sourceUri = selectedMediaUri
+        if (sourceUri == null || cues.isEmpty()) {
+            toast("ویدئو یا زیرنویس در دسترس نیست")
+            return
+        }
+        val exportCues = cues.toList()
+        val outputFile = File(cacheDir, "autosubtitle_export_" + System.currentTimeMillis() + ".mp4")
+        toast("پردازش ویدئو شروع شد؛ برنامه را باز نگه دار")
+        try {
+            val overlay = object : CanvasOverlay(true) {
+                private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.WHITE
+                    typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                    textAlign = Paint.Align.CENTER
+                }
+                private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0xCC000000.toInt()
+                    style = Paint.Style.FILL
+                }
+
+                override fun onDraw(canvas: Canvas, presentationTimeUs: Long) {
+                    val active = exportCues.firstOrNull {
+                        presentationTimeUs / 1000 >= it.startMs && presentationTimeUs / 1000 < it.endMs
+                    }
+                    if (active == null || active.text.isBlank()) return
+                    val width = canvas.width.toFloat()
+                    val height = canvas.height.toFloat()
+                    val maxTextWidth = (width * 0.88f).toInt().coerceAtLeast(1)
+                    textPaint.textSize = (height * 0.045f).coerceIn(24f, 64f)
+                    val layout = StaticLayout.Builder.obtain(
+                        active.text, 0, active.text.length, textPaint, maxTextWidth
+                    ).setAlignment(Layout.Alignment.ALIGN_CENTER)
+                        .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_RTL)
+                        .setIncludePad(false)
+                        .build()
+                    val horizontalPadding = width * 0.025f
+                    val verticalPadding = height * 0.012f
+                    val blockHeight = layout.height + verticalPadding * 2
+                    val top = height * 0.88f - blockHeight
+                    val left = (width - layout.width) / 2f - horizontalPadding
+                    val right = (width + layout.width) / 2f + horizontalPadding
+                    canvas.drawRoundRect(
+                        RectF(left, top, right, top + blockHeight),
+                        height * 0.012f, height * 0.012f, backgroundPaint
+                    )
+                    canvas.save()
+                    canvas.translate((width - layout.width) / 2f, top + verticalPadding)
+                    layout.draw(canvas)
+                    canvas.restore()
+                }
+            }
+            val editedItem = EditedMediaItem.Builder(MediaItem.fromUri(sourceUri))
+                .setEffects(Effects(emptyList(), listOf(OverlayEffect(listOf(overlay)))))
+                .build()
+            val transformer = Transformer.Builder(this)
+                .addListener(object : Transformer.Listener {
+                    override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                        Thread {
+                            try {
+                                contentResolver.openOutputStream(destinationUri)?.use { output ->
+                                    outputFile.inputStream().use { input -> input.copyTo(output, 64 * 1024) }
+                                } ?: throw IllegalStateException("محل ذخیره‌سازی قابل نوشتن نیست")
+                                runOnUiThread { toast("ویدئوی MP4 با زیرنویس چسبیده ذخیره شد") }
+                            } catch (error: Exception) {
+                                runOnUiThread { toast("ذخیره خروجی ناموفق بود: " + (error.message ?: "خطای ناشناخته")) }
+                            } finally {
+                                outputFile.delete()
+                            }
+                        }.start()
+                    }
+
+                    override fun onError(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                        exportException: ExportException
+                    ) {
+                        outputFile.delete()
+                        toast("پردازش ویدئو ناموفق بود: " + (exportException.message ?: "فرمت پشتیبانی‌نشده"))
+                    }
+                })
+                .build()
+            transformer.start(editedItem, outputFile.absolutePath)
+        } catch (error: Exception) {
+            outputFile.delete()
+            toast("شروع خروجی ناموفق بود: " + (error.message ?: "خطای ناشناخته"))
+        }
     }
 
     private fun writeSrt(uri: Uri) {
