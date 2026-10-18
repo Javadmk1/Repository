@@ -53,3 +53,16 @@ Important:
 - This repository currently builds a **debug APK**. A public Google Play release should be built as a signed release bundle (AAB), with Play App Signing configured, and the Play Console Data safety form must accurately match the app.
 
 These steps reduce avoidable security and policy issues but do not guarantee Play Protect or Google Play approval.
+
+## Signed release build (Google Play preparation)
+
+The manual workflow `.github/workflows/release-android.yml` creates a signed release APK and an Android App Bundle (AAB). It will intentionally stop until the signing secrets are configured in **GitHub → Settings → Secrets and variables → Actions**:
+
+- `ANDROID_KEYSTORE_BASE64`: Base64 text of your private upload keystore file.
+- `ANDROID_KEYSTORE_PASSWORD`: Keystore password.
+- `ANDROID_KEY_ALIAS`: Alias of the upload key.
+- `ANDROID_KEY_PASSWORD`: Password for that key.
+
+**Never commit the keystore or passwords to this repository, and never paste them into chat or issues.** Keep a secure offline backup of the keystore and its passwords. Losing the upload key can complicate future updates. Trigger **Actions → Build Signed Android Release → Run workflow** only after all four secrets are set. Download the `AutoSubtitle-signed-release` artifact from a successful run; it contains the APK and AAB but not the private keystore.
+
+This workflow only produces signed files; it does not make the app automatically approved or publish it. Before Play Console submission, replace the contact placeholder in `PRIVACY_POLICY.md`, publish the policy at a stable public HTTPS URL, verify the app's behavior and target audience, complete the Data safety declaration accurately, test the signed release on real devices, and configure Play App Signing in Play Console. The current app is still an MVP and must be reviewed for privacy, reliability, and policy compliance before public release.
