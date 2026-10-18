@@ -11,8 +11,8 @@ android {
         applicationId = "com.javadmk1.autosubtitle"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     compileOptions {
@@ -22,6 +22,23 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePath = System.getenv("RELEASE_STORE_FILE")
+            storeFile = storePath?.let { file(it) } ?: file("missing-release-key.jks")
+            storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     lint {
