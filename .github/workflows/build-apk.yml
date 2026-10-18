@@ -31,6 +31,16 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
+      - name: Download licensed Vazirmatn Persian font
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/fonts
+          curl --fail --location --retry 3 "https://raw.githubusercontent.com/rastikerdar/vazirmatn/6e553e33489a8f9dfaccc76860a2e3f3c1e66de7/fonts/ttf/Vazirmatn-Regular.ttf" -o app/src/main/assets/fonts/Vazirmatn-Regular.ttf
+          curl --fail --location --retry 3 "https://raw.githubusercontent.com/rastikerdar/vazirmatn/6e553e33489a8f9dfaccc76860a2e3f3c1e66de7/OFL.txt" -o app/src/main/assets/fonts/OFL.txt
+          test -s app/src/main/assets/fonts/Vazirmatn-Regular.ttf
+          test -s app/src/main/assets/fonts/OFL.txt
+
       - name: Run unit tests
         run: gradle testDebugUnitTest
 
