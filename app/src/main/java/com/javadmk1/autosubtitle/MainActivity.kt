@@ -57,6 +57,7 @@ class MainActivity : Activity() {
     private lateinit var previewFrame: FrameLayout
     private lateinit var subtitleOverlay: TextView
     private lateinit var fontSpinner: Spinner
+    private lateinit var animationSpinner: Spinner
     private lateinit var textColorSpinner: Spinner
     private lateinit var outlineColorSpinner: Spinner
     private lateinit var boxColorSpinner: Spinner
@@ -72,13 +73,16 @@ class MainActivity : Activity() {
     private var outlineWidth = 2
     private var backgroundOpacity = 80
     private var fontIndex = 0
+    private var animationIndex = 1
     private var textColorIndex = 0
     private var outlineColorIndex = 0
     private var boxColorIndex = 0
     private var isBold = true
     private var shadowEnabled = true
     private var boxEnabled = true
-    private val fontNames = arrayOf("Sans-serif", "Serif", "Monospace", "Sans-serif condensed", "Casual", "Cursive")
+    private val fontNames = arrayOf("پیش‌فرض فارسی/انگلیسی", "Sans-serif", "Sans-serif light", "Sans-serif medium", "Sans-serif black", "Serif", "Monospace", "Serif monospace", "Sans-serif condensed", "Casual", "Cursive")
+    private val fontFamilies = arrayOf("sans-serif", "sans-serif", "sans-serif-light", "sans-serif-medium", "sans-serif-black", "serif", "monospace", "serif-monospace", "sans-serif-condensed", "casual", "cursive")
+    private val animationNames = arrayOf("بدون انیمیشن", "محو شدن (Fade)", "ورود از پایین (Slide)", "ظاهر شدن نرم (Pop)")
     private val textColorNames = arrayOf("سفید", "زرد", "فیروزه‌ای", "قرمز", "سبز")
     private val outlineColorNames = arrayOf("مشکی", "سفید", "سرمه‌ای", "قرمز")
     private val boxColorNames = arrayOf("مشکی", "سرمه‌ای", "زرشکی", "بدون رنگ")
@@ -94,8 +98,14 @@ class MainActivity : Activity() {
                 val cueIndex = findActiveCueIndex(cues, videoPreview.currentPosition.toLong())
                 if (cueIndex != lastPreviewCueIndex) {
                     lastPreviewCueIndex = cueIndex
+                    subtitleOverlay.animate().cancel()
+                    subtitleOverlay.alpha = 1f
+                    subtitleOverlay.translationY = 0f
+                    subtitleOverlay.scaleX = 1f
+                    subtitleOverlay.scaleY = 1f
                     subtitleOverlay.text = if (cueIndex >= 0) cues[cueIndex].text else ""
                     subtitleOverlay.visibility = if (cueIndex >= 0) android.view.View.VISIBLE else android.view.View.GONE
+                    if (cueIndex >= 0) runPreviewSubtitleAnimation()
                 }
             } else if (::subtitleOverlay.isInitialized && subtitleOverlay.visibility != android.view.View.GONE) {
                 lastPreviewCueIndex = -1
@@ -198,6 +208,9 @@ class MainActivity : Activity() {
         addSettingLabel("نوع فونت")
         fontSpinner = makeSpinner(fontNames)
         content.addView(fontSpinner, matchWidth())
+        addSettingLabel("انیمیشن ورود زیرنویس")
+        animationSpinner = makeSpinner(animationNames)
+        content.addView(animationSpinner, matchWidth())
         addSettingLabel("رنگ متن")
         textColorSpinner = makeSpinner(textColorNames)
         content.addView(textColorSpinner, matchWidth())
@@ -322,6 +335,7 @@ class MainActivity : Activity() {
         outlineWidth = prefs.getInt("outline", 2).coerceIn(0, 10)
         backgroundOpacity = prefs.getInt("opacity", 80).coerceIn(0, 100)
         fontIndex = prefs.getInt("font", 0).coerceIn(fontNames.indices)
+        animationIndex = prefs.getInt("animation", 1).coerceIn(animationNames.indices)
         textColorIndex = prefs.getInt("textColor", 0).coerceIn(textColors.indices)
         outlineColorIndex = prefs.getInt("outlineColor", 0).coerceIn(outlineColors.indices)
         boxColorIndex = prefs.getInt("boxColor", 0).coerceIn(boxColors.indices)
@@ -329,6 +343,7 @@ class MainActivity : Activity() {
         shadowEnabled = prefs.getBoolean("shadow", true)
         boxEnabled = prefs.getBoolean("box", true)
         fontSpinner.setSelection(fontIndex)
+        animationSpinner.setSelection(animationIndex)
         textColorSpinner.setSelection(textColorIndex)
         outlineColorSpinner.setSelection(outlineColorIndex)
         boxColorSpinner.setSelection(boxColorIndex)
@@ -345,6 +360,7 @@ class MainActivity : Activity() {
             outlineWidth = outlineSeekBar.progress
             backgroundOpacity = opacitySeekBar.progress
             fontIndex = fontSpinner.selectedItemPosition.coerceAtLeast(0)
+            animationIndex = animationSpinner.selectedItemPosition.coerceIn(animationNames.indices)
             textColorIndex = textColorSpinner.selectedItemPosition.coerceAtLeast(0)
             outlineColorIndex = outlineColorSpinner.selectedItemPosition.coerceAtLeast(0)
             boxColorIndex = boxColorSpinner.selectedItemPosition.coerceAtLeast(0)
@@ -353,7 +369,7 @@ class MainActivity : Activity() {
             boxEnabled = boxCheckBox.isChecked
             prefs.edit().putInt("size", subtitleSizeSp).putInt("position", subtitlePosition)
                 .putInt("outline", outlineWidth).putInt("opacity", backgroundOpacity)
-                .putInt("font", fontIndex).putInt("textColor", textColorIndex)
+                .putInt("font", fontIndex).putInt("animation", animationIndex).putInt("textColor", textColorIndex)
                 .putInt("outlineColor", outlineColorIndex).putInt("boxColor", boxColorIndex)
                 .putBoolean("bold", isBold).putBoolean("shadow", shadowEnabled)
                 .putBoolean("box", boxEnabled).apply()
@@ -373,6 +389,7 @@ class MainActivity : Activity() {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
         }
         fontSpinner.onItemSelectedListener = spinnerListener
+        animationSpinner.onItemSelectedListener = spinnerListener
         textColorSpinner.onItemSelectedListener = spinnerListener
         outlineColorSpinner.onItemSelectedListener = spinnerListener
         boxColorSpinner.onItemSelectedListener = spinnerListener
@@ -441,10 +458,22 @@ class MainActivity : Activity() {
     private fun findActiveCueIndex(items: List<Cue>, timeMs: Long): Int =
         SubtitleUtils.findActiveCueIndex(items, timeMs)
 
+    private fun runPreviewSubtitleAnimation() {
+        if (animationIndex == 0) return
+        val view = subtitleOverlay
+        view.animate().cancel()
+        view.alpha = if (animationIndex == 1) 0f else 1f
+        view.translationY = if (animationIndex == 2) dp(18).toFloat() else 0f
+        view.scaleX = if (animationIndex == 3) 0.88f else 1f
+        view.scaleY = if (animationIndex == 3) 0.88f else 1f
+        val animator = view.animate().setDuration(320L).alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+        animator.start()
+    }
+
     private fun applySubtitleStyle() {
         if (!::subtitleOverlay.isInitialized) return
         subtitleOverlay.textSize = subtitleSizeSp.toFloat()
-        subtitleOverlay.typeface = Typeface.create(fontNames[fontIndex.coerceIn(fontNames.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
+        subtitleOverlay.typeface = Typeface.create(fontFamilies[fontIndex.coerceIn(fontFamilies.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
         subtitleOverlay.setTextColor(textColors[textColorIndex.coerceIn(textColors.indices)])
         val alpha = (backgroundOpacity * 255 / 100).coerceIn(0, 255)
         val baseBox = boxColors[boxColorIndex.coerceIn(boxColors.indices)]
@@ -934,6 +963,7 @@ class MainActivity : Activity() {
         val exportOutlineWidth = outlineWidth
         val exportOpacity = backgroundOpacity
         val exportFontIndex = fontIndex
+        val exportAnimationIndex = animationIndex
         val exportTextColor = textColors[textColorIndex.coerceIn(textColors.indices)]
         val exportOutlineColor = outlineColors[outlineColorIndex.coerceIn(outlineColors.indices)]
         val exportBoxColor = boxColors[boxColorIndex.coerceIn(boxColors.indices)]
@@ -945,12 +975,12 @@ class MainActivity : Activity() {
             val overlay = object : CanvasOverlay(true) {
                 private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = exportTextColor
-                    typeface = Typeface.create(fontNames[exportFontIndex.coerceIn(fontNames.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
+                    typeface = Typeface.create(fontFamilies[exportFontIndex.coerceIn(fontFamilies.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
                     textAlign = Paint.Align.CENTER
                 }
                 private val outlinePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = exportOutlineColor
-                    typeface = Typeface.create(fontNames[exportFontIndex.coerceIn(fontNames.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
+                    typeface = Typeface.create(fontFamilies[exportFontIndex.coerceIn(fontFamilies.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
                     textAlign = Paint.Align.CENTER
                     style = Paint.Style.STROKE
                     strokeJoin = Paint.Join.ROUND
@@ -1005,6 +1035,18 @@ class MainActivity : Activity() {
                     val top = (height - cachedBlockHeight) * exportPosition / 100f
                     val left = (width - layout.width) / 2f - cachedHorizontalPadding
                     val right = (width + layout.width) / 2f + cachedHorizontalPadding
+                    val elapsedMs = (presentationTimeUs / 1000L - active.startMs).coerceAtLeast(0L)
+                    val progress = (elapsedMs / 320f).coerceIn(0f, 1f)
+                    val animationAlpha = if (exportAnimationIndex == 1) (progress * 255f).toInt() else 255
+                    textPaint.alpha = animationAlpha
+                    outlinePaint.alpha = animationAlpha
+                    backgroundPaint.alpha = if (exportBox && exportBoxColor != Color.TRANSPARENT) ((exportOpacity * 255 / 100) * animationAlpha / 255) else 0
+                    val slideOffset = if (exportAnimationIndex == 2) height * 0.035f * (1f - progress) else 0f
+                    val popScale = if (exportAnimationIndex == 3) 0.88f + 0.12f * progress else 1f
+                    canvas.save()
+                    canvas.translate(width / 2f, top + cachedBlockHeight / 2f + slideOffset)
+                    canvas.scale(popScale, popScale)
+                    canvas.translate(-width / 2f, -(top + cachedBlockHeight / 2f))
                     if (exportBox && exportBoxColor != Color.TRANSPARENT) {
                         canvas.drawRoundRect(
                             RectF(left, top, right, top + cachedBlockHeight),
@@ -1016,6 +1058,10 @@ class MainActivity : Activity() {
                     if (exportOutlineWidth > 0) outlineLayout.draw(canvas)
                     layout.draw(canvas)
                     canvas.restore()
+                    canvas.restore()
+                    textPaint.alpha = 255
+                    outlinePaint.alpha = 255
+                    backgroundPaint.alpha = if (exportBox && exportBoxColor != Color.TRANSPARENT) (exportOpacity * 255 / 100).coerceIn(0, 255) else 0
                 }
             }
             val editedItem = EditedMediaItem.Builder(MediaItem.fromUri(sourceUri))
