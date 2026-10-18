@@ -8,7 +8,8 @@ An Android subtitle app with a Persian-first interface.
 - Create and edit subtitle cues manually.
 - Export UTF-8 SubRip (SRT) subtitle files.
 - Preview timed subtitles over video and jump playback to a subtitle cue.
-- Customize subtitle font family, size, text color, outline color and thickness, vertical position, background color and opacity, bold style, and shadow.
+- Choose from 11 Android system font families intended to cover Persian and English text, with size, color, outline, position, background, bold, and shadow controls.
+- Choose subtitle entrance animation: fade, slide up, soft pop, or none; animations are applied both in preview and to burned-in MP4 output.
 - Save subtitle appearance preferences between app launches.
 - Export MP4 with subtitles burned into the video using AndroidX Media3 Transformer.
 - Optional automatic transcription of selected audio files through the OpenAI Whisper transcription API.
@@ -35,12 +36,12 @@ Important:
 - GitHub Actions runs local unit tests, Android lint checks, and then builds the debug APK on pushes to the main branch.
 - Open the repository's Actions tab and download the AutoSubtitle-debug artifact from a successful run.
 - Subtitle timing lookup and SRT timestamp formatting have unit tests in app/src/test.
-- The current pipeline produces a debug APK only. Release signing is intentionally not configured until a private upload key is securely set up.
+- The automatic pipeline produces a debug APK. A separate manual workflow can produce a signed release APK and AAB after private upload-key secrets are configured.
 
 ## Planned improvements
 
 - Improve export progress, cancellation, and compatibility for more video formats.
-- Expand subtitle styling options and add an export progress indicator.
+- Add bundled font files for consistent typography across devices, and improve export progress/cancellation and compatibility for more video formats.
 - Improve upload progress, large-file handling, and error messages.
 
 
@@ -50,7 +51,7 @@ Important:
 - The app targets Android 16 / API 36 for current Google Play submission requirements.
 - An in-app privacy notice explains the optional upload to OpenAI; the API-key field is cleared when a transcription request begins.
 - Review `PRIVACY_POLICY.md`, replace the contact placeholder, publish the policy at a stable public HTTPS URL, and use that URL in Play Console before release.
-- This repository currently builds a **debug APK**. A public Google Play release should be built as a signed release bundle (AAB), with Play App Signing configured, and the Play Console Data safety form must accurately match the app.
+- The automatic build produces a **debug APK**; the manual release workflow produces a signed release bundle (AAB) once signing secrets are configured. Play App Signing and the Play Console Data safety form still require careful setup.
 
 These steps reduce avoidable security and policy issues but do not guarantee Play Protect or Google Play approval.
 
