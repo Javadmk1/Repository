@@ -48,6 +48,17 @@ import androidx.media3.transformer.Composition
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ExportException
 import org.json.JSONObject
+import dev.ffmpegkit.whisper.Whisper
+import dev.ffmpegkit.whisper.WhisperConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : Activity() {
     private val cues = mutableListOf<Cue>()
@@ -124,6 +135,9 @@ class MainActivity : Activity() {
     private var editingCueIndex: Int? = null
     private var lastPreviewCueIndex: Int = Int.MIN_VALUE
     private var selectedMediaUri: Uri? = null
+    private var autoLanguage = "fa"
+    private var transcriptionJob: Job? = null
+    private lateinit var languageSpinner: Spinner
 
     companion object {
         private const val REQUEST_PICK_MEDIA = 100
@@ -288,6 +302,29 @@ class MainActivity : Activity() {
             text = "ویرایش، پیش‌نمایش و خروجی روی گوشی انجام می‌شود و هیچ فایلی برای تبدیل به سرویس آنلاین فرستاده نمی‌شود. تشخیص خودکار گفتار با مدل آفلاین هنوز در دست توسعه است."
             textSize = 12f
             setPadding(0, dp(2), 0, dp(12))
+        }, matchWidth())
+
+        content.addView(TextView(this).apply {
+            text = "زیرنویس خودکار آفلاین"
+            textSize = 19f
+            setTextColor(0xFFF4F7FF.toInt())
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setPadding(0, dp(18), 0, dp(6))
+        }, matchWidth())
+        content.addView(TextView(this).apply {
+            text = "موتور Whisper روی خود گوشی اجرا می‌شود. مدل پایه حدود 142 مگابایت است و فقط یک‌بار دانلود می‌شود؛ پس از آن تشخیص گفتار بدون API و بدون ارسال فایل انجام می‌شود."
+            textSize = 12f
+            setTextColor(0xFF9EABC7.toInt())
+            setPadding(0, 0, 0, dp(8))
+        }, matchWidth())
+        languageSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                arrayOf("فارسی", "English", "تشخیص خودکار زبان"))
+            setSelection(0)
+        }
+        content.addView(languageSpinner, matchWidth())
+        content.addView(makeButton("ساخت زیرنویس خودکار از فایل انتخاب‌شده") {
+            startLocalTranscription()
         }, matchWidth())
 
         content.addView(makeButton("حریم خصوصی و نحوهٔ پردازش فایل‌ها") { showPrivacyNotice() }, matchWidth())
@@ -606,6 +643,115 @@ class MainActivity : Activity() {
 
 
 
+
+    private fun startLocalTranscription() {
+        val uri = selectedMediaUri
+        if (uri == null) {
+            toast("ابتدا فایل صوتی یا ویدئو را انتخاب کن")
+            return
+        }
+        if (transcriptionJob?.isActive == true) {
+            toast("تبدیل در حال انجام است")
+            return
+        }
+        autoLanguage = when (languageSpinner.selectedItemPosition) {
+            1 -> "en"
+            2 -> "auto"
+            else -> "fa"
+        }
+        val progress = android.app.ProgressDialog(this).apply {
+            setTitle("زیرنویس خودکار")
+            setMessage("در حال آماده‌سازی موتور آفلاین…")
+            setCancelable(false)
+            show()
+        }
+        transcriptionJob = CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val resultCues = withContext(Dispatchers.IO) {
+                    val modelFile = File(filesDir, "models/ggml-base.bin")
+                    if (!modelFile.exists() || modelFile.length() < 100_000_000L) {
+                        modelFile.parentFile?.mkdirs()
+                        val partial = File(modelFile.parentFile, "ggml-base.bin.download")
+                        val connection = (URL("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin").openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 20000
+                            readTimeout = 60000
+                            instanceFollowRedirects = true
+                        }
+                        try {
+                            connection.connect()
+                            if (connection.responseCode !in 200..299) throw IllegalStateException("دانلود مدل ناموفق بود: HTTP ${connection.responseCode}")
+                            BufferedInputStream(connection.inputStream).use { input ->
+                                FileOutputStream(partial).use { output ->
+                                    val buffer = ByteArray(64 * 1024)
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count < 0) break
+                                        output.write(buffer, 0, count)
+                                    }
+                                    output.fd.sync()
+                                }
+                            }
+                            if (partial.length() < 100_000_000L) throw IllegalStateException("فایل مدل ناقص دانلود شد")
+                            if (!partial.renameTo(modelFile)) throw IllegalStateException("ذخیره مدل ناموفق بود")
+                        } finally {
+                            connection.disconnect()
+                            partial.delete()
+                        }
+                    }
+                    val mime = contentResolver.getType(uri) ?: ""
+                    val audioFile = if (mime.startsWith("video/")) {
+                        extractAudioTrack(uri)
+                    } else {
+                        copySelectedAudioToCache(uri)
+                    }
+                    try {
+                        val model = Whisper.loadModel(this@MainActivity, modelFile.absolutePath)
+                        try {
+                            val cfg = WhisperConfig(language = autoLanguage)
+                            val result = Whisper.transcribe(model, audioFile.absolutePath, cfg)
+                            result.segments.mapNotNull { segment ->
+                                val text = segment.text.trim()
+                                if (text.isBlank() || segment.endMs <= segment.startMs) null
+                                else Cue(segment.startMs, segment.endMs, text)
+                            }
+                        } finally {
+                            Whisper.releaseModel(model)
+                        }
+                    } finally {
+                        audioFile.delete()
+                    }
+                }
+                if (resultCues.isEmpty()) {
+                    toast("گفتار قابل تشخیصی پیدا نشد؛ زبان یا کیفیت صدا را بررسی کن")
+                } else {
+                    cues.clear()
+                    cues.addAll(resultCues)
+                    editingCueIndex = null
+                    renderCueList()
+                    toast("${resultCues.size} خط زیرنویس ساخته شد؛ متن و زمان‌ها را بازبینی کن")
+                }
+            } catch (error: Exception) {
+                toast("تبدیل انجام نشد: ${error.message ?: "خطای ناشناخته"}")
+            } finally {
+                progress.dismiss()
+            }
+        }
+    }
+
+    private fun copySelectedAudioToCache(uri: Uri): File {
+        val name = getDisplayName(uri).lowercase(java.util.Locale.ROOT)
+        val ext = when {
+            name.endsWith(".wav") -> ".wav"
+            name.endsWith(".mp3") -> ".mp3"
+            name.endsWith(".flac") -> ".flac"
+            else -> throw IllegalStateException("برای تشخیص آفلاین، فعلاً فایل صوتی WAV، MP3 یا FLAC انتخاب کن")
+        }
+        val target = File(cacheDir, "asr_input_${System.currentTimeMillis()}$ext")
+        contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(target).use { output -> input.copyTo(output) }
+        } ?: throw IllegalStateException("خواندن فایل انتخاب‌شده ممکن نشد")
+        return target
+    }
 
     private fun extractAudioTrack(uri: Uri): File {
         val extractor = MediaExtractor()
