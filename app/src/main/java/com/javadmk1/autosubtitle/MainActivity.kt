@@ -701,24 +701,25 @@ class MainActivity : Activity() {
                         for (modelUrl in modelUrls) {
                             var connection: HttpURLConnection? = null
                             try {
-                                connection = (URL(modelUrl).openConnection() as HttpURLConnection).apply {
+                                val activeConnection = (URL(modelUrl).openConnection() as HttpURLConnection).apply {
                                     connectTimeout = 30000
                                     readTimeout = 120000
                                     instanceFollowRedirects = true
                                     setRequestProperty("User-Agent", "SubtitleYar-Android")
                                 }
-                                connection.connect()
-                                if (connection.responseCode !in 200..299) {
-                                    throw IllegalStateException("سرور مدل پاسخ HTTP ${connection.responseCode} داد")
+                                connection = activeConnection
+                                activeConnection.connect()
+                                if (activeConnection.responseCode !in 200..299) {
+                                    throw IllegalStateException("سرور مدل پاسخ HTTP ${activeConnection.responseCode} داد")
                                 }
-                                val totalBytes = connection.contentLengthLong
+                                val totalBytes = activeConnection.contentLengthLong
                                 var receivedBytes = 0L
                                 var lastUiUpdateBytes = 0L
                                 runOnUiThread {
                                     progress.progress = 0
                                     progress.setMessage("در حال دانلود مدل گفتار؛ بار اول ممکن است چند دقیقه طول بکشد…")
                                 }
-                                BufferedInputStream(connection.inputStream).use { input ->
+                                BufferedInputStream(activeConnection.inputStream).use { input ->
                                     FileOutputStream(partial).use { output ->
                                         val buffer = ByteArray(64 * 1024)
                                         while (true) {
