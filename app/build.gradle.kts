@@ -11,8 +11,8 @@ android {
         applicationId = "com.javadmk1.autosubtitle"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0"
     }
 
     compileOptions {
@@ -54,5 +54,5 @@ dependencies {
     implementation("androidx.media3:media3-transformer:$media3Version")
 
     // Local unit tests for subtitle timing and SRT formatting.
-    testImplementation("junit:junit:4.13.2")
+    implementation("dev.ffmpegkit-maintained:whisper-android:1.0.0")\n    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")\n\n    testImplementation("junit:junit:4.13.2")
 }
