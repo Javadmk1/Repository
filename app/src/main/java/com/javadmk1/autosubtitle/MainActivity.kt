@@ -148,7 +148,7 @@ class MainActivity : Activity() {
         }, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "نسخه 0.3.0 · زیرنویس خودکار، ویرایش زمان‌بندی و خروجی ویدئو"
+            text = "نسخه 0.5.0 · فونت‌های فارسی/انگلیسی و انیمیشن زیرنویس"
             textSize = 16f
             setPadding(0, dp(6), 0, dp(16))
         }, matchWidth())
