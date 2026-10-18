@@ -1022,7 +1022,7 @@ class MainActivity : Activity() {
                 }
                 private val outlinePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = exportOutlineColor
-                    typeface = Typeface.create(fontFamilies[exportFontIndex.coerceIn(fontFamilies.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
+                    typeface = subtitleTypeface(exportFontIndex, exportBold)
                     textAlign = Paint.Align.CENTER
                     style = Paint.Style.STROKE
                     strokeJoin = Paint.Join.ROUND
