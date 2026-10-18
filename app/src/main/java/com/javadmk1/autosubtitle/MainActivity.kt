@@ -700,7 +700,7 @@ class MainActivity : Activity() {
                     }
                     val mime = contentResolver.getType(uri) ?: ""
                     val audioFile = if (mime.startsWith("video/")) {
-                        extractAudioTrack(uri)
+                        extractAudioToWav(uri)
                     } else {
                         copySelectedAudioToCache(uri)
                     }
@@ -727,7 +727,7 @@ class MainActivity : Activity() {
                     cues.clear()
                     cues.addAll(resultCues)
                     editingCueIndex = null
-                    renderCueList()
+                    refreshCueList()
                     toast("${resultCues.size} خط زیرنویس ساخته شد؛ متن و زمان‌ها را بازبینی کن")
                 }
             } catch (error: Exception) {
@@ -753,59 +753,129 @@ class MainActivity : Activity() {
         return target
     }
 
-    private fun extractAudioTrack(uri: Uri): File {
+    private fun extractAudioToWav(uri: Uri): File {
         val extractor = MediaExtractor()
-        var muxer: MediaMuxer? = null
-        val output = File(cacheDir, "autosub_audio_" + System.currentTimeMillis() + ".m4a")
+        val raw = File(cacheDir, "asr_pcm_" + System.currentTimeMillis() + ".raw")
+        val wav = File(cacheDir, "asr_audio_" + System.currentTimeMillis() + ".wav")
+        var decoder: android.media.MediaCodec? = null
+        var sampleRate = 16000
+        var channels = 1
+        var pcmEncoding = android.media.AudioFormat.ENCODING_PCM_16BIT
         try {
             extractor.setDataSource(this, uri, null)
             var audioTrack = -1
             var audioFormat: MediaFormat? = null
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
-                val trackMime = format.getString(MediaFormat.KEY_MIME) ?: continue
-                if (trackMime.startsWith("audio/")) {
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (mime.startsWith("audio/")) {
                     audioTrack = i
                     audioFormat = format
                     break
                 }
             }
-            if (audioTrack < 0 || audioFormat == null) {
-                throw IllegalStateException("در این ویدئو ترک صوتی پیدا نشد")
-            }
+            if (audioTrack < 0 || audioFormat == null) throw IllegalStateException("در این ویدئو صدایی پیدا نشد")
+            val mime = audioFormat.getString(MediaFormat.KEY_MIME) ?: throw IllegalStateException("کدک صوتی ناشناخته است")
             extractor.selectTrack(audioTrack)
-            muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val outputTrack = muxer.addTrack(audioFormat)
-            muxer.start()
-            val buffer = java.nio.ByteBuffer.allocateDirect(1024 * 1024)
+            decoder = android.media.MediaCodec.createDecoderByType(mime)
+            decoder.configure(audioFormat, null, null, 0)
+            decoder.start()
+            var inputDone = false
+            var outputDone = false
             val info = android.media.MediaCodec.BufferInfo()
-            while (true) {
-                buffer.clear()
-                val size = extractor.readSampleData(buffer, 0)
-                if (size < 0) break
-                info.offset = 0
-                info.size = size
-                info.presentationTimeUs = extractor.sampleTime
-                // Translate MediaExtractor flags to the MediaCodec flag set.
-                info.flags = 0
-                if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
-                    info.flags = info.flags or android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME
+            FileOutputStream(raw).use { rawOut ->
+                while (!outputDone) {
+                    if (!inputDone) {
+                        val inputIndex = decoder.dequeueInputBuffer(10000)
+                        if (inputIndex >= 0) {
+                            val inputBuffer = decoder.getInputBuffer(inputIndex)!!
+                            inputBuffer.clear()
+                            val size = extractor.readSampleData(inputBuffer, 0)
+                            if (size < 0) {
+                                decoder.queueInputBuffer(inputIndex, 0, 0, 0L, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                inputDone = true
+                            } else {
+                                decoder.queueInputBuffer(inputIndex, 0, size, extractor.sampleTime, 0)
+                                extractor.advance()
+                            }
+                        }
+                    }
+                    when (val outputIndex = decoder.dequeueOutputBuffer(info, 10000)) {
+                        android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            val outFormat = decoder.outputFormat
+                            sampleRate = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                            channels = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                            if (outFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) pcmEncoding = outFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                        }
+                        android.media.MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                        else -> if (outputIndex >= 0) {
+                            val outputBuffer = decoder.getOutputBuffer(outputIndex)
+                            if (outputBuffer != null && info.size > 0) {
+                                outputBuffer.position(info.offset)
+                                outputBuffer.limit(info.offset + info.size)
+                                val bytes = ByteArray(info.size)
+                                outputBuffer.get(bytes)
+                                when (pcmEncoding) {
+                                    android.media.AudioFormat.ENCODING_PCM_16BIT -> rawOut.write(bytes)
+                                    android.media.AudioFormat.ENCODING_PCM_FLOAT -> {
+                                        val bb = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.nativeOrder())
+                                        while (bb.remaining() >= 4) {
+                                            val sample = bb.float.coerceIn(-1f, 1f)
+                                            val pcm = (sample * 32767f).toInt().toShort()
+                                            rawOut.write(pcm.toInt() and 0xFF)
+                                            rawOut.write((pcm.toInt() shr 8) and 0xFF)
+                                        }
+                                    }
+                                    else -> throw IllegalStateException("فرمت صدای PCM پشتیبانی نمی‌شود")
+                                }
+                            }
+                            outputDone = (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
+                            decoder.releaseOutputBuffer(outputIndex, false)
+                        }
+                    }
                 }
-                if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
-                    info.flags = info.flags or android.media.MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
-                }
-                muxer.writeSampleData(outputTrack, buffer, info)
-                if (!extractor.advance()) break
             }
-            muxer.stop()
-            return output
+            val pcmBytes = raw.length()
+            if (pcmBytes <= 0L) throw IllegalStateException("صدای قابل پردازشی استخراج نشد")
+            FileOutputStream(wav).use { out ->
+                val byteRate = sampleRate * channels * 2
+                out.write("RIFF".toByteArray(Charsets.US_ASCII))
+                writeLeInt(out, (36L + pcmBytes).toInt())
+                out.write("WAVE".toByteArray(Charsets.US_ASCII))
+                out.write("fmt ".toByteArray(Charsets.US_ASCII))
+                writeLeInt(out, 16)
+                writeLeShort(out, 1)
+                writeLeShort(out, channels)
+                writeLeInt(out, sampleRate)
+                writeLeInt(out, byteRate)
+                writeLeShort(out, channels * 2)
+                writeLeShort(out, 16)
+                out.write("data".toByteArray(Charsets.US_ASCII))
+                writeLeInt(out, pcmBytes.toInt())
+                raw.inputStream().use { it.copyTo(out) }
+            }
+            return wav
         } catch (e: Exception) {
-            output.delete()
-            throw IllegalStateException("استخراج صدا ناموفق بود: " + (e.message ?: "فرمت پشتیبانی‌نشده"))
+            wav.delete()
+            throw IllegalStateException("آماده‌سازی صدای ویدئو ناموفق بود: " + (e.message ?: "فرمت پشتیبانی‌نشده"))
         } finally {
-            try { muxer?.release() } catch (_: Exception) {}
+            try { decoder?.stop() } catch (_: Exception) {}
+            try { decoder?.release() } catch (_: Exception) {}
             extractor.release()
+            raw.delete()
         }
+    }
+
+    private fun writeLeInt(out: java.io.OutputStream, value: Int) {
+        out.write(value and 0xFF)
+        out.write((value shr 8) and 0xFF)
+        out.write((value shr 16) and 0xFF)
+        out.write((value shr 24) and 0xFF)
+    }
+
+    private fun writeLeShort(out: java.io.OutputStream, value: Int) {
+        out.write(value and 0xFF)
+        out.write((value shr 8) and 0xFF)
     }
 
     private fun getFileSize(uri: Uri): Long {
