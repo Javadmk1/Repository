@@ -138,6 +138,7 @@ class MainActivity : Activity() {
     private var autoLanguage = "fa"
     private var transcriptionJob: Job? = null
     private lateinit var languageSpinner: Spinner
+    private lateinit var modelQualitySpinner: Spinner
 
     companion object {
         private const val REQUEST_PICK_MEDIA = 100
@@ -196,7 +197,10 @@ class MainActivity : Activity() {
         }
         content.addView(selectedFileLabel, matchWidth())
 
-        previewFrame = FrameLayout(this).apply {\n            background = roundedBackground(0xFF121A2B.toInt(), 0xFF283752.toInt(), 20)\n            clipToOutline = true\n        }
+        previewFrame = FrameLayout(this).apply {
+            background = roundedBackground(0xFF121A2B.toInt(), 0xFF283752.toInt(), 20)
+            clipToOutline = true
+        }
         videoPreview = VideoView(this).apply {
             visibility = android.view.View.GONE
             setBackgroundColor(0xFF080B12.toInt())
@@ -312,7 +316,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(18), 0, dp(6))
         }, matchWidth())
         content.addView(TextView(this).apply {
-            text = "موتور Whisper روی خود گوشی اجرا می‌شود. مدل پایه حدود 142 مگابایت است و فقط یک‌بار دانلود می‌شود؛ پس از آن تشخیص گفتار بدون API و بدون ارسال فایل انجام می‌شود."
+            text = "برای سرعت مدل پایه را انتخاب کن؛ برای دقت بهتر مدل کوچک را امتحان کن. مدل انتخابی فقط یک‌بار دانلود می‌شود و پس از آن گفتار روی گوشی و بدون API پردازش می‌شود."
             textSize = 12f
             setTextColor(0xFF9EABC7.toInt())
             setPadding(0, 0, 0, dp(8))
@@ -323,6 +327,13 @@ class MainActivity : Activity() {
             setSelection(0)
         }
         content.addView(languageSpinner, matchWidth())
+        addSettingLabel("کیفیت موتور تشخیص گفتار")
+        modelQualitySpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                arrayOf("پایه · سریع‌تر · حدود 142 مگابایت", "کوچک · دقت بالاتر · حدود 466 مگابایت"))
+            setSelection(0)
+        }
+        content.addView(modelQualitySpinner, matchWidth())
         content.addView(makeButton("ساخت زیرنویس خودکار از فایل انتخاب‌شده") {
             startLocalTranscription()
         }, matchWidth())
@@ -334,7 +345,11 @@ class MainActivity : Activity() {
             textSize = 16f
         }, matchWidth())
         subtitleInput = EditText(this).apply {
-            hint = "متن فارسی یا انگلیسی را وارد کن"\n            setTextColor(0xFFF4F7FF.toInt())\n            setHintTextColor(0xFF7887A5.toInt())\n            background = roundedBackground(0xFF121A2B.toInt(), 0xFF33425F.toInt(), 14)\n            setPadding(dp(12), dp(10), dp(12), dp(10))
+            hint = "متن فارسی یا انگلیسی را وارد کن"
+            setTextColor(0xFFF4F7FF.toInt())
+            setHintTextColor(0xFF7887A5.toInt())
+            background = roundedBackground(0xFF121A2B.toInt(), 0xFF33425F.toInt(), 14)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
             minLines = 2
             gravity = Gravity.TOP
             setSingleLine(false)
@@ -668,11 +683,13 @@ class MainActivity : Activity() {
         transcriptionJob = CoroutineScope(Dispatchers.Main).launch {
             try {
                 val resultCues = withContext(Dispatchers.IO) {
-                    val modelFile = File(filesDir, "models/ggml-base.bin")
-                    if (!modelFile.exists() || modelFile.length() < 100_000_000L) {
+                    val modelName = if (modelQualitySpinner.selectedItemPosition == 1) "ggml-small.bin" else "ggml-base.bin"
+                    val minimumModelBytes = if (modelName == "ggml-small.bin") 300_000_000L else 100_000_000L
+                    val modelFile = File(filesDir, "models/$modelName")
+                    if (!modelFile.exists() || modelFile.length() < minimumModelBytes) {
                         modelFile.parentFile?.mkdirs()
-                        val partial = File(modelFile.parentFile, "ggml-base.bin.download")
-                        val connection = (URL("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin").openConnection() as HttpURLConnection).apply {
+                        val partial = File(modelFile.parentFile, "$modelName.download")
+                        val connection = (URL("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelName").openConnection() as HttpURLConnection).apply {
                             connectTimeout = 20000
                             readTimeout = 60000
                             instanceFollowRedirects = true
@@ -691,7 +708,7 @@ class MainActivity : Activity() {
                                     output.fd.sync()
                                 }
                             }
-                            if (partial.length() < 100_000_000L) throw IllegalStateException("فایل مدل ناقص دانلود شد")
+                            if (partial.length() < minimumModelBytes) throw IllegalStateException("فایل مدل ناقص دانلود شد؛ فضای ذخیره‌سازی و اینترنت را بررسی کن")
                             if (!partial.renameTo(modelFile)) throw IllegalStateException("ذخیره مدل ناموفق بود")
                         } finally {
                             connection.disconnect()
@@ -972,7 +989,8 @@ class MainActivity : Activity() {
                 setBackgroundColor(0xFFF1F3F5.toInt())
             }
             item.addView(TextView(this).apply {
-                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "\n" + cue.text
+                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "
+" + cue.text
                 textSize = 14f
             }, matchWidth())
             val actions = LinearLayout(this).apply {
@@ -1047,14 +1065,17 @@ class MainActivity : Activity() {
                     return ((h * 3600 + m * 60 + sec) * 1000) + fraction
                 }
                 val imported = mutableListOf<Cue>()
-                raw.removePrefix("\uFEFF").split(Regex("""\r?\n\s*\r?\n""")).forEach { block ->
+                raw.removePrefix("\uFEFF").split(Regex("""\r?
+\s*\r?
+""")).forEach { block ->
                     val lines = block.lines()
                     val timeIndex = lines.indexOfFirst { timestamp.containsMatchIn(it) }
                     if (timeIndex >= 0) {
                         val match = timestamp.find(lines[timeIndex])!!
                         val start = millis(match, 1)
                         val end = millis(match, 5)
-                        val text = lines.drop(timeIndex + 1).joinToString("\n").trim()
+                        val text = lines.drop(timeIndex + 1).joinToString("
+").trim()
                         if (text.isNotEmpty() && end > start) imported.add(Cue(start, end, text))
                     }
                 }
@@ -1260,8 +1281,12 @@ class MainActivity : Activity() {
 
     private fun writeSrt(uri: Uri) {
         val srt = cues.mapIndexed { index, cue ->
-            "${index + 1}\n${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}\n${cue.text}\n"
-        }.joinToString("\n")
+            "${index + 1}
+${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}
+${cue.text}
+"
+        }.joinToString("
+")
         try {
             contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(srt) }
                 ?: throw IllegalStateException("Could not open output file")
