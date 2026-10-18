@@ -8,12 +8,17 @@ An Android subtitle app with a Persian-first interface.
 - Create and edit subtitle cues manually.
 - Export UTF-8 SubRip (SRT) subtitle files.
 - Preview timed subtitles over video and jump playback to a subtitle cue.
-- Choose from 11 Android system font families intended to cover Persian and English text, with size, color, outline, position, background, bold, and shadow controls.
+- Choose from 11 Android system font families plus bundled Vazirmatn for consistent Persian/English typography, with size, color, outline, position, background, bold, and shadow controls.
 - Choose subtitle entrance animation: fade, slide up, soft pop, or none; animations are applied both in preview and to burned-in MP4 output.
 - Save subtitle appearance preferences between app launches.
 - Export MP4 with subtitles burned into the video using AndroidX Media3 Transformer.
 - Optional automatic transcription of selected audio files through the OpenAI Whisper transcription API.
 - Extract the audio track from selected videos (when the device can demux the format), then transcribe it through Whisper.
+
+## Bundled font and license
+
+- The Vazirmatn Regular font is downloaded from the official upstream repository at a pinned commit during CI builds and included in the APK for consistent Persian rendering.
+- The font is distributed under the SIL Open Font License 1.1; its license notice is included in the app assets at `fonts/OFL.txt`.
 
 ## Automatic transcription setup
 
@@ -41,7 +46,7 @@ Important:
 ## Planned improvements
 
 - Improve export progress, cancellation, and compatibility for more video formats.
-- Add bundled font files for consistent typography across devices, and improve export progress/cancellation and compatibility for more video formats.
+- Improve export progress, cancellation, and compatibility for more video formats.
 - Improve upload progress, large-file handling, and error messages.
 
 
