@@ -670,7 +670,14 @@ class MainActivity : Activity() {
                 info.offset = 0
                 info.size = size
                 info.presentationTimeUs = extractor.sampleTime
-                info.flags = extractor.sampleFlags
+                // Translate MediaExtractor flags to the MediaCodec flag set.
+                info.flags = 0
+                if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                    info.flags = info.flags or android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME
+                }
+                if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
+                    info.flags = info.flags or android.media.MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
+                }
                 muxer.writeSampleData(outputTrack, buffer, info)
                 if (!extractor.advance()) break
             }
