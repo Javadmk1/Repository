@@ -26,6 +26,7 @@ import android.widget.Spinner
 import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.database.Cursor
 import android.provider.OpenableColumns
 import android.graphics.Canvas
@@ -47,8 +48,6 @@ import androidx.media3.transformer.Composition
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ExportException
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 class MainActivity : Activity() {
     private val cues = mutableListOf<Cue>()
@@ -136,22 +135,43 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        window.statusBarColor = 0xFF0B1020.toInt()
+        window.navigationBarColor = 0xFF0B1020.toInt()
+        window.decorView.systemUiVisibility = 0
+
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(18))
+            setPadding(dp(16), dp(18), dp(16), dp(28))
+            setBackgroundColor(0xFF0B1020.toInt())
         }
-        val scroll = ScrollView(this).apply { addView(content) }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(0xFF0B1020.toInt())
+            isFillViewport = true
+            addView(content)
+        }
 
         content.addView(TextView(this).apply {
-            text = "AutoSubtitle"
-            textSize = 28f
+            text = "زیرنویس‌یار"
+            textSize = 30f
+            setTextColor(0xFFF4F7FF.toInt())
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(3))
         }, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "نسخه 0.6.0 · فونت اختصاصی وزیرمتن و انیمیشن زیرنویس"
-            textSize = 16f
-            setPadding(0, dp(6), 0, dp(16))
+            text = "ویرایش و خروجی زیرنویس · کاملاً روی دستگاه"
+            textSize = 14f
+            setTextColor(0xFF9EABC7.toInt())
+            setPadding(0, 0, 0, dp(18))
+        }, matchWidth())
+
+        content.addView(TextView(this).apply {
+            text = "●  بدون API  ·  فایل‌ها روی گوشی می‌مانند"
+            textSize = 12f
+            setTextColor(0xFF9DE8D3.toInt())
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = roundedBackground(0xFF132A30.toInt(), 0xFF28514F.toInt(), 14)
         }, matchWidth())
 
         content.addView(makeButton("انتخاب ویدئو یا فایل صوتی") { pickMedia() }, matchWidth())
@@ -162,10 +182,10 @@ class MainActivity : Activity() {
         }
         content.addView(selectedFileLabel, matchWidth())
 
-        previewFrame = FrameLayout(this)
+        previewFrame = FrameLayout(this).apply {\n            background = roundedBackground(0xFF121A2B.toInt(), 0xFF283752.toInt(), 20)\n            clipToOutline = true\n        }
         videoPreview = VideoView(this).apply {
             visibility = android.view.View.GONE
-            setBackgroundColor(0xFF111111.toInt())
+            setBackgroundColor(0xFF080B12.toInt())
             val controller = MediaController(this@MainActivity)
             setMediaController(controller)
             controller.setAnchorView(this)
@@ -190,7 +210,7 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, dp(220)
         ).apply { bottomMargin = dp(12) })
         content.addView(TextView(this).apply {
-            text = "تنظیمات ظاهر زیرنویس"
+            text = "ظاهر و استایل زیرنویس"
             textSize = 19f
             setPadding(0, dp(8), 0, dp(6))
         }, matchWidth())
@@ -260,12 +280,12 @@ class MainActivity : Activity() {
         content.addView(boxCheckBox, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "حالت آفلاین: بدون API و بدون ارسال فایل"
+            text = "حریم خصوصی و حالت آفلاین"
             textSize = 16f
             setPadding(0, dp(8), 0, dp(4))
         }, matchWidth())
         content.addView(TextView(this).apply {
-            text = "ساخت و ویرایش زیرنویس، پیش‌نمایش، خروجی SRT و چسباندن زیرنویس به MP4 روی دستگاه انجام می‌شود. تشخیص خودکار گفتار با مدل محلی هنوز در این نسخه فعال نیست؛ برای جلوگیری از نیاز به API، فایل‌ها به هیچ سرویس آنلاین فرستاده نمی‌شوند."
+            text = "ویرایش، پیش‌نمایش و خروجی روی گوشی انجام می‌شود و هیچ فایلی برای تبدیل به سرویس آنلاین فرستاده نمی‌شود. تشخیص خودکار گفتار با مدل آفلاین هنوز در دست توسعه است."
             textSize = 12f
             setPadding(0, dp(2), 0, dp(12))
         }, matchWidth())
@@ -273,11 +293,11 @@ class MainActivity : Activity() {
         content.addView(makeButton("حریم خصوصی و نحوهٔ پردازش فایل‌ها") { showPrivacyNotice() }, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "متن زیرنویس"
+            text = "ویرایش یک زیرنویس"
             textSize = 16f
         }, matchWidth())
         subtitleInput = EditText(this).apply {
-            hint = "متن فارسی یا انگلیسی را وارد کن"
+            hint = "متن فارسی یا انگلیسی را وارد کن"\n            setTextColor(0xFFF4F7FF.toInt())\n            setHintTextColor(0xFF7887A5.toInt())\n            background = roundedBackground(0xFF121A2B.toInt(), 0xFF33425F.toInt(), 14)\n            setPadding(dp(12), dp(10), dp(12), dp(10))
             minLines = 2
             gravity = Gravity.TOP
             setSingleLine(false)
@@ -328,7 +348,7 @@ class MainActivity : Activity() {
         content.addView(makeButton("ساخت ویدئوی MP4 با زیرنویس چسبیده") { requestBurnInExport() }, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "زیرنویس‌های ثبت‌شده"
+            text = "خطوط زیرنویس در تایم‌لاین"
             textSize = 18f
             setPadding(0, dp(18), 0, dp(8))
         }, matchWidth())
@@ -1039,8 +1059,27 @@ class MainActivity : Activity() {
 
     private fun makeButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
+        textSize = 14f
+        isAllCaps = false
+        setTextColor(0xFFF7FAFF.toInt())
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        minHeight = dp(48)
+        background = roundedBackground(
+            if (label.contains("خروجی") || label.contains("افزودن") || label.contains("انتخاب")) 0xFF6558E8.toInt() else 0xFF1A2740.toInt(),
+            if (label.contains("خروجی") || label.contains("افزودن") || label.contains("انتخاب")) 0xFF8B83FF.toInt() else 0xFF344563.toInt(),
+            14
+        )
+        setPadding(dp(14), dp(8), dp(14), dp(8))
         setOnClickListener { action() }
     }
+
+    private fun roundedBackground(fill: Int, stroke: Int, radiusDp: Int): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(fill)
+            cornerRadius = dp(radiusDp).toFloat()
+            setStroke(dp(1), stroke)
+        }
 
     private fun matchWidth() = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
