@@ -677,6 +677,9 @@ class MainActivity : Activity() {
         val modelName = if (modelQualitySpinner.selectedItemPosition == 1) "ggml-small.bin" else "ggml-base.bin"
         val progress = android.app.ProgressDialog(this).apply {
             setTitle("زیرنویس خودکار")
+            setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+            max = 100
+            progress = 0
             setMessage("در حال آماده‌سازی موتور آفلاین…")
             setCancelable(false)
             show()
@@ -689,30 +692,77 @@ class MainActivity : Activity() {
                     if (!modelFile.exists() || modelFile.length() < minimumModelBytes) {
                         modelFile.parentFile?.mkdirs()
                         val partial = File(modelFile.parentFile, "$modelName.download")
-                        val connection = (URL("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelName").openConnection() as HttpURLConnection).apply {
-                            connectTimeout = 20000
-                            readTimeout = 60000
-                            instanceFollowRedirects = true
-                        }
-                        try {
-                            connection.connect()
-                            if (connection.responseCode !in 200..299) throw IllegalStateException("دانلود مدل ناموفق بود: HTTP ${connection.responseCode}")
-                            BufferedInputStream(connection.inputStream).use { input ->
-                                FileOutputStream(partial).use { output ->
-                                    val buffer = ByteArray(64 * 1024)
-                                    while (true) {
-                                        val count = input.read(buffer)
-                                        if (count < 0) break
-                                        output.write(buffer, 0, count)
-                                    }
-                                    output.fd.sync()
+                        val modelUrls = listOf(
+                            "https://huggingface.co/ggml-org/whisper.cpp/resolve/main/$modelName",
+                            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelName"
+                        )
+                        var downloaded = false
+                        var lastDownloadError: Exception? = null
+                        for (modelUrl in modelUrls) {
+                            var connection: HttpURLConnection? = null
+                            try {
+                                connection = (URL(modelUrl).openConnection() as HttpURLConnection).apply {
+                                    connectTimeout = 30000
+                                    readTimeout = 120000
+                                    instanceFollowRedirects = true
+                                    setRequestProperty("User-Agent", "SubtitleYar-Android")
                                 }
+                                connection.connect()
+                                if (connection.responseCode !in 200..299) {
+                                    throw IllegalStateException("سرور مدل پاسخ HTTP ${connection.responseCode} داد")
+                                }
+                                val totalBytes = connection.contentLengthLong
+                                var receivedBytes = 0L
+                                var lastUiUpdateBytes = 0L
+                                runOnUiThread {
+                                    progress.progress = 0
+                                    progress.setMessage("در حال دانلود مدل گفتار؛ بار اول ممکن است چند دقیقه طول بکشد…")
+                                }
+                                BufferedInputStream(connection.inputStream).use { input ->
+                                    FileOutputStream(partial).use { output ->
+                                        val buffer = ByteArray(64 * 1024)
+                                        while (true) {
+                                            val count = input.read(buffer)
+                                            if (count < 0) break
+                                            output.write(buffer, 0, count)
+                                            receivedBytes += count
+                                            if (receivedBytes - lastUiUpdateBytes >= 1024 * 1024L) {
+                                                lastUiUpdateBytes = receivedBytes
+                                                if (totalBytes > 0L) {
+                                                    val percent = ((receivedBytes * 100L) / totalBytes).toInt().coerceIn(0, 100)
+                                                    runOnUiThread {
+                                                        progress.progress = percent
+                                                        progress.setMessage("دانلود مدل گفتار: $percent٪")
+                                                    }
+                                                } else {
+                                                    val downloadedMb = receivedBytes / (1024L * 1024L)
+                                                    runOnUiThread {
+                                                        progress.setMessage("در حال دانلود مدل گفتار: $downloadedMb مگابایت")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        output.fd.sync()
+                                    }
+                                }
+                                if (partial.length() < minimumModelBytes) {
+                                    throw IllegalStateException("فایل مدل ناقص دانلود شد؛ اینترنت، فضای خالی و دسترسی به Hugging Face را بررسی کن")
+                                }
+                                if (!partial.renameTo(modelFile)) throw IllegalStateException("ذخیره مدل ناموفق بود")
+                                downloaded = true
+                                break
+                            } catch (error: Exception) {
+                                lastDownloadError = error
+                                partial.delete()
+                            } finally {
+                                connection?.disconnect()
                             }
-                            if (partial.length() < minimumModelBytes) throw IllegalStateException("فایل مدل ناقص دانلود شد؛ فضای ذخیره‌سازی و اینترنت را بررسی کن")
-                            if (!partial.renameTo(modelFile)) throw IllegalStateException("ذخیره مدل ناموفق بود")
-                        } finally {
-                            connection.disconnect()
-                            partial.delete()
+                        }
+                        if (!downloaded) {
+                            throw IllegalStateException(
+                                "دانلود مدل انجام نشد. اتصال اینترنت را بررسی کن و دوباره امتحان کن. " +
+                                    (lastDownloadError?.message ?: "")
+                            )
                         }
                     }
                     val mime = contentResolver.getType(uri) ?: ""
