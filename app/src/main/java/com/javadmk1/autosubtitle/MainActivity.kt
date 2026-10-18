@@ -58,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var subtitleOverlay: TextView
     private lateinit var fontSpinner: Spinner
     private lateinit var animationSpinner: Spinner
+    private lateinit var fontSamplePreview: TextView
     private lateinit var textColorSpinner: Spinner
     private lateinit var outlineColorSpinner: Spinner
     private lateinit var boxColorSpinner: Spinner
@@ -211,6 +212,26 @@ class MainActivity : Activity() {
         addSettingLabel("انیمیشن ورود زیرنویس")
         animationSpinner = makeSpinner(animationNames)
         content.addView(animationSpinner, matchWidth())
+        fontSamplePreview = TextView(this).apply {
+            text = "سلام دنیا · Hello World 123"
+            textSize = 24f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xFF172033.toInt())
+            setPadding(dp(14), dp(18), dp(14), dp(18))
+            contentDescription = "پیش‌نمایش فونت فارسی و انگلیسی"
+        }
+        val fontSampleParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        fontSampleParams.topMargin = dp(8)
+        content.addView(fontSamplePreview, fontSampleParams)
+        content.addView(makeButton("آزمایش انیمیشن انتخاب‌شده") {
+            fontSamplePreview.animate().cancel()
+            fontSamplePreview.alpha = 1f
+            fontSamplePreview.translationY = 0f
+            fontSamplePreview.scaleX = 1f
+            fontSamplePreview.scaleY = 1f
+            runPreviewSubtitleAnimation(fontSamplePreview)
+        }, matchWidth())
         addSettingLabel("رنگ متن")
         textColorSpinner = makeSpinner(textColorNames)
         content.addView(textColorSpinner, matchWidth())
@@ -458,9 +479,8 @@ class MainActivity : Activity() {
     private fun findActiveCueIndex(items: List<Cue>, timeMs: Long): Int =
         SubtitleUtils.findActiveCueIndex(items, timeMs)
 
-    private fun runPreviewSubtitleAnimation() {
+    private fun runPreviewSubtitleAnimation(view: android.view.View = subtitleOverlay) {
         if (animationIndex == 0) return
-        val view = subtitleOverlay
         view.animate().cancel()
         view.alpha = if (animationIndex == 1) 0f else 1f
         view.translationY = if (animationIndex == 2) dp(18).toFloat() else 0f
@@ -474,6 +494,10 @@ class MainActivity : Activity() {
         if (!::subtitleOverlay.isInitialized) return
         subtitleOverlay.textSize = subtitleSizeSp.toFloat()
         subtitleOverlay.typeface = Typeface.create(fontFamilies[fontIndex.coerceIn(fontFamilies.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
+        if (::fontSamplePreview.isInitialized) {
+            fontSamplePreview.typeface = Typeface.create(fontFamilies[fontIndex.coerceIn(fontFamilies.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
+            fontSamplePreview.setTextColor(textColors[textColorIndex.coerceIn(textColors.indices)])
+        }
         subtitleOverlay.setTextColor(textColors[textColorIndex.coerceIn(textColors.indices)])
         val alpha = (backgroundOpacity * 255 / 100).coerceIn(0, 255)
         val baseBox = boxColors[boxColorIndex.coerceIn(boxColors.indices)]
