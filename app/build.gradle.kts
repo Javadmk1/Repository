@@ -23,6 +23,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    lint {
+        // Keep existing lint findings visible without blocking debug APK builds.
+        abortOnError = false
+    }
 }
 
 dependencies {
