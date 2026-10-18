@@ -74,6 +74,8 @@ class MainActivity : Activity() {
     private var outlineWidth = 2
     private var backgroundOpacity = 80
     private var fontIndex = 0
+    private var bundledVazirmatnTypeface: Typeface? = null
+    private var bundledVazirmatnLoaded = false
     private var animationIndex = 1
     private var textColorIndex = 0
     private var outlineColorIndex = 0
@@ -81,8 +83,8 @@ class MainActivity : Activity() {
     private var isBold = true
     private var shadowEnabled = true
     private var boxEnabled = true
-    private val fontNames = arrayOf("پیش‌فرض فارسی/انگلیسی", "Sans-serif", "Sans-serif light", "Sans-serif medium", "Sans-serif black", "Serif", "Monospace", "Serif monospace", "Sans-serif condensed", "Casual", "Cursive")
-    private val fontFamilies = arrayOf("sans-serif", "sans-serif", "sans-serif-light", "sans-serif-medium", "sans-serif-black", "serif", "monospace", "serif-monospace", "sans-serif-condensed", "casual", "cursive")
+    private val fontNames = arrayOf("پیش‌فرض فارسی/انگلیسی", "Sans-serif", "Sans-serif light", "Sans-serif medium", "Sans-serif black", "Serif", "Monospace", "Serif monospace", "Sans-serif condensed", "Casual", "Cursive", "Vazirmatn (فونت فارسی اختصاصی)")
+    private val fontFamilies = arrayOf("sans-serif", "sans-serif", "sans-serif-light", "sans-serif-medium", "sans-serif-black", "serif", "monospace", "serif-monospace", "sans-serif-condensed", "casual", "cursive", "sans-serif")
     private val animationNames = arrayOf("بدون انیمیشن", "محو شدن (Fade)", "ورود از پایین (Slide)", "ظاهر شدن نرم (Pop)")
     private val textColorNames = arrayOf("سفید", "زرد", "فیروزه‌ای", "قرمز", "سبز")
     private val outlineColorNames = arrayOf("مشکی", "سفید", "سرمه‌ای", "قرمز")
@@ -149,7 +151,7 @@ class MainActivity : Activity() {
         }, matchWidth())
 
         content.addView(TextView(this).apply {
-            text = "نسخه 0.5.0 · فونت‌های فارسی/انگلیسی و انیمیشن زیرنویس"
+            text = "نسخه 0.6.0 · فونت اختصاصی وزیرمتن و انیمیشن زیرنویس"
             textSize = 16f
             setPadding(0, dp(6), 0, dp(16))
         }, matchWidth())
@@ -490,12 +492,28 @@ class MainActivity : Activity() {
         animator.start()
     }
 
+    private fun subtitleTypeface(index: Int, bold: Boolean): Typeface {
+        val safeIndex = index.coerceIn(fontNames.indices)
+        val style = if (bold) Typeface.BOLD else Typeface.NORMAL
+        if (safeIndex == fontNames.lastIndex) {
+            if (!bundledVazirmatnLoaded) {
+                bundledVazirmatnLoaded = true
+                bundledVazirmatnTypeface = runCatching {
+                    Typeface.createFromAsset(assets, "fonts/Vazirmatn-Regular.ttf")
+                }.getOrNull()
+            }
+            val base = bundledVazirmatnTypeface ?: Typeface.create("sans-serif", Typeface.NORMAL)
+            return Typeface.create(base, style)
+        }
+        return Typeface.create(fontFamilies[safeIndex], style)
+    }
+
     private fun applySubtitleStyle() {
         if (!::subtitleOverlay.isInitialized) return
         subtitleOverlay.textSize = subtitleSizeSp.toFloat()
-        subtitleOverlay.typeface = Typeface.create(fontFamilies[fontIndex.coerceIn(fontFamilies.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
+        subtitleOverlay.typeface = subtitleTypeface(fontIndex, isBold)
         if (::fontSamplePreview.isInitialized) {
-            fontSamplePreview.typeface = Typeface.create(fontFamilies[fontIndex.coerceIn(fontFamilies.indices)], if (isBold) Typeface.BOLD else Typeface.NORMAL)
+            fontSamplePreview.typeface = subtitleTypeface(fontIndex, isBold)
             fontSamplePreview.setTextColor(textColors[textColorIndex.coerceIn(textColors.indices)])
         }
         subtitleOverlay.setTextColor(textColors[textColorIndex.coerceIn(textColors.indices)])
@@ -999,7 +1017,7 @@ class MainActivity : Activity() {
             val overlay = object : CanvasOverlay(true) {
                 private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = exportTextColor
-                    typeface = Typeface.create(fontFamilies[exportFontIndex.coerceIn(fontFamilies.indices)], if (exportBold) Typeface.BOLD else Typeface.NORMAL)
+                    typeface = subtitleTypeface(exportFontIndex, exportBold)
                     textAlign = Paint.Align.CENTER
                 }
                 private val outlinePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
