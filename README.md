@@ -12,28 +12,18 @@ An Android subtitle app with a Persian-first interface.
 - Choose subtitle entrance animation: fade, slide up, soft pop, or none; animations are applied both in preview and to burned-in MP4 output.
 - Save subtitle appearance preferences between app launches.
 - Export MP4 with subtitles burned into the video using AndroidX Media3 Transformer.
-- Optional automatic transcription of selected audio files through the OpenAI Whisper transcription API.
-- Extract the audio track from selected videos (when the device can demux the format), then transcribe it through Whisper.
+- Core subtitle editing, preview, SRT export, and MP4 subtitle rendering work locally without an API key or app server.
+- No selected media is uploaded to a transcription service in this version.
+- Automatic speech recognition using a bundled local model is not yet implemented; the app does not claim to transcribe speech automatically offline yet.
 
 ## Bundled font and license
 
 - The Vazirmatn Regular font is downloaded from the official upstream repository at a pinned commit during CI builds and included in the APK for consistent Persian rendering.
 - The font is distributed under the SIL Open Font License 1.1; its license notice is included in the app assets at `fonts/OFL.txt`.
 
-## Automatic transcription setup
+## Offline-first operation
 
-1. Open the app and select an audio or video file.
-2. Enter your own OpenAI API key in the password field.
-3. Tap the automatic transcription button and wait for the timestamped segments.
-4. Export the result as an SRT file.
-
-Important:
-- Automatic transcription requires an internet connection and a valid API key.
-- API usage may incur charges. Check current pricing and account availability before use.
-- The API key is only held in the input field while the app is running; the app does not intentionally save it.
-- Audio is sent to the transcription provider for processing. Do not upload sensitive recordings unless you have permission.
-- Provider limits apply to file size, formats, and duration.
-- This is a debug/MVP build, not a production-ready release.
+The app intentionally does not request internet permission and no longer includes the OpenAI transcription API flow. Subtitle editing and export are performed on the device. Automatic transcription from media files is not available in this build; a future offline ASR engine and its language models must be integrated and tested before that feature can be advertised.
 
 ## Build and dependencies
 
@@ -45,16 +35,15 @@ Important:
 
 ## Planned improvements
 
+- Integrate and validate a local speech-recognition model for Persian and English without a network API.
 - Improve export progress, cancellation, and compatibility for more video formats.
-- Improve export progress, cancellation, and compatibility for more video formats.
-- Improve upload progress, large-file handling, and error messages.
 
 
 ## Security and Google Play preparation
 
-- The manifest disables Android app backup and cleartext (non-HTTPS) traffic.
+- The manifest disables Android app backup and does not request internet access for the app.
 - The app targets Android 16 / API 36 for current Google Play submission requirements.
-- An in-app privacy notice explains the optional upload to OpenAI; the API-key field is cleared when a transcription request begins.
+- An in-app privacy notice explains that media files are not uploaded to an online transcription provider.
 - Review `PRIVACY_POLICY.md`, replace the contact placeholder, publish the policy at a stable public HTTPS URL, and use that URL in Play Console before release.
 - The automatic build produces a **debug APK**; the manual release workflow produces a signed release bundle (AAB) once signing secrets are configured. Play App Signing and the Play Console Data safety form still require careful setup.
 
