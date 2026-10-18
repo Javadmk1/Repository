@@ -503,7 +503,7 @@ class MainActivity : Activity() {
                 }.getOrNull()
             }
             val base = bundledVazirmatnTypeface ?: Typeface.create("sans-serif", Typeface.NORMAL)
-            return Typeface.create(base, style)
+            return if (android.os.Build.VERSION.SDK_INT >= 28) Typeface.create(base, style) else if (bold) Typeface.create("sans-serif", Typeface.BOLD) else base
         }
         return Typeface.create(fontFamilies[safeIndex], style)
     }
