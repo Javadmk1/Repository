@@ -1281,12 +1281,8 @@ class MainActivity : Activity() {
 
     private fun writeSrt(uri: Uri) {
         val srt = cues.mapIndexed { index, cue ->
-            "${index + 1}
-${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}
-${cue.text}
-"
-        }.joinToString("
-")
+            "${index + 1}\\n${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}\\n${cue.text}\\n"
+        }.joinToString("\\n")
         try {
             contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(srt) }
                 ?: throw IllegalStateException("Could not open output file")
