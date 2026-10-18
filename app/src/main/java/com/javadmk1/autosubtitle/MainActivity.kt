@@ -989,7 +989,7 @@ class MainActivity : Activity() {
                 setBackgroundColor(0xFFF1F3F5.toInt())
             }
             item.addView(TextView(this).apply {
-                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "\\n" + cue.text
+                text = (index + 1).toString() + ". " + formatTime(cue.startMs) + " --> " + formatTime(cue.endMs) + "\n" + cue.text
                 textSize = 14f
             }, matchWidth())
             val actions = LinearLayout(this).apply {
@@ -1073,7 +1073,7 @@ class MainActivity : Activity() {
                         val match = timestamp.find(lines[timeIndex])!!
                         val start = millis(match, 1)
                         val end = millis(match, 5)
-                        val text = lines.drop(timeIndex + 1).joinToString("\\n").trim()
+                        val text = lines.drop(timeIndex + 1).joinToString("\n").trim()
                         if (text.isNotEmpty() && end > start) imported.add(Cue(start, end, text))
                     }
                 }
@@ -1279,8 +1279,8 @@ class MainActivity : Activity() {
 
     private fun writeSrt(uri: Uri) {
         val srt = cues.mapIndexed { index, cue ->
-            "${index + 1}\\n${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}\\n${cue.text}\\n"
-        }.joinToString("\\n")
+            "${index + 1}\n${formatTime(cue.startMs)} --> ${formatTime(cue.endMs)}\n${cue.text}\n"
+        }.joinToString("\n")
         try {
             contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(srt) }
                 ?: throw IllegalStateException("Could not open output file")
