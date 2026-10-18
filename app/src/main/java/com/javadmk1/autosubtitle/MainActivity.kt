@@ -674,6 +674,7 @@ class MainActivity : Activity() {
             2 -> "auto"
             else -> "fa"
         }
+        val modelName = if (modelQualitySpinner.selectedItemPosition == 1) "ggml-small.bin" else "ggml-base.bin"
         val progress = android.app.ProgressDialog(this).apply {
             setTitle("زیرنویس خودکار")
             setMessage("در حال آماده‌سازی موتور آفلاین…")
@@ -683,7 +684,6 @@ class MainActivity : Activity() {
         transcriptionJob = CoroutineScope(Dispatchers.Main).launch {
             try {
                 val resultCues = withContext(Dispatchers.IO) {
-                    val modelName = if (modelQualitySpinner.selectedItemPosition == 1) "ggml-small.bin" else "ggml-base.bin"
                     val minimumModelBytes = if (modelName == "ggml-small.bin") 300_000_000L else 100_000_000L
                     val modelFile = File(filesDir, "models/$modelName")
                     if (!modelFile.exists() || modelFile.length() < minimumModelBytes) {
