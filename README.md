@@ -23,7 +23,7 @@ An Android subtitle app with a Persian-first interface.
 
 ## Offline-first operation
 
-The app intentionally does not request internet permission and no longer includes the OpenAI transcription API flow. Subtitle editing and export are performed on the device. Automatic transcription from media files is not available in this build; a future offline ASR engine and its language models must be integrated and tested before that feature can be advertised.
+The app uses no online transcription API. It downloads the Whisper base model (about 142 MB) once over HTTPS on first use, then processes audio locally without uploading selected media. The user can choose Persian, English, or automatic language detection. Video audio is decoded locally to a temporary WAV file. Core editing, SRT export, and MP4 rendering remain on-device.
 
 ## Build and dependencies
 
@@ -41,7 +41,7 @@ The app intentionally does not request internet permission and no longer include
 
 ## Security and Google Play preparation
 
-- The manifest disables Android app backup and does not request internet access for the app.
+- The manifest disables Android app backup. Internet access is used only to download the speech model on first use; media files are not uploaded.
 - The app targets Android 16 / API 36 for current Google Play submission requirements.
 - An in-app privacy notice explains that media files are not uploaded to an online transcription provider.
 - Review `PRIVACY_POLICY.md`, replace the contact placeholder, publish the policy at a stable public HTTPS URL, and use that URL in Play Console before release.
