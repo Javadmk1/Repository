@@ -659,7 +659,9 @@ class MainActivity : Activity() {
 
 
 
-    private fun modelNameInAssets(): String = "models/ggml-base.bin"\n\n    private fun startLocalTranscription() {
+    private fun modelNameInAssets(): String = "models/ggml-base.bin"
+
+    private fun startLocalTranscription() {
         val uri = selectedMediaUri
         if (uri == null) {
             toast("ابتدا فایل صوتی یا ویدئو را انتخاب کن")
