@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />
-    <application
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:label="زیرنویس‌یار"
