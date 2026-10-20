@@ -303,7 +303,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(4))
         }, matchWidth())
         content.addView(TextView(this).apply {
-            text = "ویرایش، پیش‌نمایش و خروجی روی گوشی انجام می‌شود و هیچ فایلی برای تبدیل به سرویس آنلاین فرستاده نمی‌شود. تشخیص خودکار گفتار با مدل آفلاین هنوز در دست توسعه است."
+            text = "موتور تشخیص گفتار و مدل پایه همراه APK نصب می‌شود؛ برای ساخت زیرنویس به دانلود مدل یا API نیاز نیست. پردازش روی گوشی انجام می‌شود."
             textSize = 12f
             setPadding(0, dp(2), 0, dp(12))
         }, matchWidth())
@@ -316,7 +316,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(18), 0, dp(6))
         }, matchWidth())
         content.addView(TextView(this).apply {
-            text = "برای سرعت مدل پایه را انتخاب کن؛ برای دقت بهتر مدل کوچک را امتحان کن. مدل انتخابی فقط یک‌بار دانلود می‌شود و پس از آن گفتار روی گوشی و بدون API پردازش می‌شود."
+            text = "مدل پایه همراه برنامه نصب می‌شود. بار اول فقط آماده‌سازی فایل داخلی روی گوشی انجام می‌شود؛ اینترنت لازم نیست."
             textSize = 12f
             setTextColor(0xFF9EABC7.toInt())
             setPadding(0, 0, 0, dp(8))
@@ -330,7 +330,7 @@ class MainActivity : Activity() {
         addSettingLabel("کیفیت موتور تشخیص گفتار")
         modelQualitySpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                arrayOf("پایه · سریع‌تر · حدود 142 مگابایت", "کوچک · دقت بالاتر · حدود 466 مگابایت"))
+                arrayOf("مدل پایهٔ آفلاین · حدود 142 مگابایت · همراه برنامه"))
             setSelection(0)
         }
         content.addView(modelQualitySpinner, matchWidth())
@@ -659,7 +659,7 @@ class MainActivity : Activity() {
 
 
 
-    private fun startLocalTranscription() {
+    private fun modelNameInAssets(): String = "models/ggml-base.bin"\n\n    private fun startLocalTranscription() {
         val uri = selectedMediaUri
         if (uri == null) {
             toast("ابتدا فایل صوتی یا ویدئو را انتخاب کن")
@@ -674,99 +674,61 @@ class MainActivity : Activity() {
             2 -> "auto"
             else -> "fa"
         }
-        val modelName = if (modelQualitySpinner.selectedItemPosition == 1) "ggml-small.bin" else "ggml-base.bin"
+        val modelName = "ggml-base.bin"
         val progress = android.app.ProgressDialog(this).apply {
-            setTitle("زیرنویس خودکار")
+            setTitle("زیرنویس خودکار آفلاین")
             setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
             max = 100
             progress = 0
-            setMessage("در حال آماده‌سازی موتور آفلاین…")
+            setMessage("در حال آماده‌سازی موتور گفتار همراه برنامه…")
             setCancelable(false)
             show()
         }
         transcriptionJob = CoroutineScope(Dispatchers.Main).launch {
             try {
                 val resultCues = withContext(Dispatchers.IO) {
-                    val minimumModelBytes = if (modelName == "ggml-small.bin") 300_000_000L else 100_000_000L
+                    val minimumModelBytes = 100_000_000L
                     val modelFile = File(filesDir, "models/$modelName")
                     if (!modelFile.exists() || modelFile.length() < minimumModelBytes) {
                         modelFile.parentFile?.mkdirs()
-                        val partial = File(modelFile.parentFile, "$modelName.download")
-                        val modelUrls = listOf(
-                            "https://huggingface.co/ggml-org/whisper.cpp/resolve/main/$modelName",
-                            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelName"
-                        )
-                        var downloaded = false
-                        var lastDownloadError: Exception? = null
-                        for (modelUrl in modelUrls) {
-                            var connection: HttpURLConnection? = null
-                            try {
-                                val activeConnection = (URL(modelUrl).openConnection() as HttpURLConnection).apply {
-                                    connectTimeout = 30000
-                                    readTimeout = 120000
-                                    instanceFollowRedirects = true
-                                    setRequestProperty("User-Agent", "SubtitleYar-Android")
-                                }
-                                connection = activeConnection
-                                activeConnection.connect()
-                                if (activeConnection.responseCode !in 200..299) {
-                                    throw IllegalStateException("سرور مدل پاسخ HTTP ${activeConnection.responseCode} داد")
-                                }
-                                val totalBytes = activeConnection.contentLengthLong
-                                var receivedBytes = 0L
-                                var lastUiUpdateBytes = 0L
-                                runOnUiThread {
-                                    progress.progress = 0
-                                    progress.setMessage("در حال دانلود مدل گفتار؛ بار اول ممکن است چند دقیقه طول بکشد…")
-                                }
-                                BufferedInputStream(activeConnection.inputStream).use { input ->
-                                    FileOutputStream(partial).use { output ->
-                                        val buffer = ByteArray(64 * 1024)
-                                        while (true) {
-                                            val count = input.read(buffer)
-                                            if (count < 0) break
-                                            output.write(buffer, 0, count)
-                                            receivedBytes += count
-                                            if (receivedBytes - lastUiUpdateBytes >= 1024 * 1024L) {
-                                                lastUiUpdateBytes = receivedBytes
-                                                if (totalBytes > 0L) {
-                                                    val percent = ((receivedBytes * 100L) / totalBytes).toInt().coerceIn(0, 100)
-                                                    runOnUiThread {
-                                                        progress.progress = percent
-                                                        progress.setMessage("دانلود مدل گفتار: $percent٪")
-                                                    }
-                                                } else {
-                                                    val downloadedMb = receivedBytes / (1024L * 1024L)
-                                                    runOnUiThread {
-                                                        progress.setMessage("در حال دانلود مدل گفتار: $downloadedMb مگابایت")
-                                                    }
-                                                }
+                        val partial = File(modelFile.parentFile, "$modelName.copying")
+                        partial.delete()
+                        try {
+                            val assetLength = assets.open(modelNameInAssets()).use { input ->
+                                FileOutputStream(partial).use { output ->
+                                    val buffer = ByteArray(64 * 1024)
+                                    var copied = 0L
+                                    var lastUiUpdate = 0L
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count < 0) break
+                                        output.write(buffer, 0, count)
+                                        copied += count
+                                        if (copied - lastUiUpdate >= 1024 * 1024L) {
+                                            lastUiUpdate = copied
+                                            val copiedMb = copied / (1024L * 1024L)
+                                            runOnUiThread {
+                                                progress.setMessage("آماده‌سازی مدل آفلاین: $copiedMb مگابایت")
                                             }
                                         }
-                                        output.fd.sync()
                                     }
+                                    output.fd.sync()
+                                    copied
                                 }
-                                if (partial.length() < minimumModelBytes) {
-                                    throw IllegalStateException("فایل مدل ناقص دانلود شد؛ اینترنت، فضای خالی و دسترسی به Hugging Face را بررسی کن")
-                                }
-                                if (!partial.renameTo(modelFile)) throw IllegalStateException("ذخیره مدل ناموفق بود")
-                                downloaded = true
-                                break
-                            } catch (error: Exception) {
-                                lastDownloadError = error
-                                partial.delete()
-                            } finally {
-                                connection?.disconnect()
                             }
-                        }
-                        if (!downloaded) {
-                            throw IllegalStateException(
-                                "دانلود مدل انجام نشد. اتصال اینترنت را بررسی کن و دوباره امتحان کن. " +
-                                    (lastDownloadError?.message ?: "")
-                            )
+                            if (assetLength < minimumModelBytes || partial.length() < minimumModelBytes) {
+                                throw IllegalStateException("مدل گفتار همراه برنامه ناقص است؛ APK کامل را دوباره نصب کن")
+                            }
+                            if (modelFile.exists()) modelFile.delete()
+                            if (!partial.renameTo(modelFile)) {
+                                throw IllegalStateException("آماده‌سازی مدل روی گوشی ناموفق بود")
+                            }
+                        } finally {
+                            partial.delete()
                         }
                     }
                     val mime = contentResolver.getType(uri) ?: ""
+
                     val audioFile = if (mime.startsWith("video/")) {
                         extractAudioToWav(uri)
                     } else {
