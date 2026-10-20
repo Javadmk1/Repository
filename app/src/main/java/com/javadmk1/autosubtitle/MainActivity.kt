@@ -709,8 +709,10 @@ class MainActivity : Activity() {
                                         if (copied - lastUiUpdate >= 1024 * 1024L) {
                                             lastUiUpdate = copied
                                             val copiedMb = copied / (1024L * 1024L)
+                                            val percent = ((copied * 100L) / 142_000_000L).toInt().coerceIn(0, 99)
                                             runOnUiThread {
-                                                progress.setMessage("آماده‌سازی مدل آفلاین: $copiedMb مگابایت")
+                                                progress.setMessage("در حال کپی مدل آفلاین: $copiedMb مگابایت")
+                                                progress.progress = percent
                                             }
                                         }
                                     }
@@ -729,6 +731,10 @@ class MainActivity : Activity() {
                             partial.delete()
                         }
                     }
+                    runOnUiThread {
+                        progress.progress = 100
+                        progress.setMessage("مدل آماده شد؛ در حال آماده‌سازی صدای فایل…")
+                    }
                     val mime = contentResolver.getType(uri) ?: ""
 
                     val audioFile = if (mime.startsWith("video/")) {
@@ -737,8 +743,16 @@ class MainActivity : Activity() {
                         copySelectedAudioToCache(uri)
                     }
                     try {
+                        runOnUiThread {
+                            progress.progress = 0
+                            progress.setMessage("در حال بارگذاری موتور تشخیص گفتار؛ ممکن است بار اول کمی طول بکشد…")
+                        }
                         val model = Whisper.loadModel(this@MainActivity, modelFile.absolutePath)
                         try {
+                            runOnUiThread {
+                                progress.progress = 25
+                                progress.setMessage("موتور آماده شد؛ در حال تشخیص گفتار…")
+                            }
                             val cfg = WhisperConfig(language = autoLanguage)
                             val result = Whisper.transcribe(model, audioFile.absolutePath, cfg)
                             result.segments.mapNotNull { segment ->
