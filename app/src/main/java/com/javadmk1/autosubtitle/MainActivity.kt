@@ -745,9 +745,17 @@ class MainActivity : Activity() {
                         progress.setMessage("در حال آماده‌سازی و تبدیل صدای فایل؛ این مرحله ممکن است کمی طول بکشد…")
                     }
 
-                    // Always decode the selected media to a local WAV. This avoids relying on
-                    // provider MIME types or filename extensions and gives Whisper a consistent input.
-                    val audioFile = extractAudioToWav(uri)
+                    val selectedName = getDisplayName(uri).lowercase(java.util.Locale.ROOT)
+                    val selectedMime = (contentResolver.getType(uri) ?: "").lowercase(java.util.Locale.ROOT)
+                    val looksLikeVideo = selectedMime.startsWith("video/") ||
+                        selectedName.endsWith(".mp4") || selectedName.endsWith(".mkv") ||
+                        selectedName.endsWith(".mov") || selectedName.endsWith(".webm") ||
+                        selectedName.endsWith(".3gp") || selectedName.endsWith(".avi")
+                    val audioFile = if (looksLikeVideo) {
+                        extractAudioToWav(uri)
+                    } else {
+                        prepareAudioForWhisper(uri, selectedName, selectedMime)
+                    }
                     try {
                         runOnUiThread {
                             progress.progress = 20
@@ -788,6 +796,30 @@ class MainActivity : Activity() {
             } finally {
                 progress.dismiss()
             }
+        }
+    }
+
+    private fun prepareAudioForWhisper(uri: Uri, name: String, mime: String): File {
+        // whisper-android natively decodes WAV, MP3 and FLAC and resamples them internally.
+        // Preserve these files directly; decode other audio formats through Android MediaCodec.
+        val extension = when {
+            name.endsWith(".wav") || mime == "audio/wav" || mime == "audio/x-wav" || mime == "audio/wave" -> ".wav"
+            name.endsWith(".mp3") || mime == "audio/mpeg" || mime == "audio/mp3" -> ".mp3"
+            name.endsWith(".flac") || mime == "audio/flac" || mime == "audio/x-flac" -> ".flac"
+            else -> null
+        }
+        if (extension == null) return extractAudioToWav(uri)
+
+        val target = File(cacheDir, "asr_input_${System.currentTimeMillis()}$extension")
+        try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(target).use { output -> input.copyTo(output) }
+            } ?: throw IllegalStateException("خواندن فایل صوتی انتخاب‌شده ممکن نشد")
+            if (target.length() <= 0L) throw IllegalStateException("فایل صوتی خالی است")
+            return target
+        } catch (error: Exception) {
+            target.delete()
+            throw IllegalStateException("خواندن فایل صوتی ناموفق بود: ${error.message ?: "خطای ناشناخته"}")
         }
     }
 
