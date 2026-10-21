@@ -758,10 +758,10 @@ class MainActivity : Activity() {
                         val model = Whisper.loadModel(this@MainActivity, modelFile.absolutePath)
                         try {
                             runOnUiThread {
-                                progress.progress = 30
-                                progress.setMessage("موتور آماده شد؛ در حال تشخیص گفتار روی گوشی. این مرحله ممکن است چند دقیقه طول بکشد…")
+                                progress.isIndeterminate = true
+                                progress.setMessage("در حال تشخیص گفتار روی گوشی؛ برای فایل‌های طولانی چند دقیقه صبر کن…")
                             }
-                            val cfg = WhisperConfig(language = autoLanguage)
+                            val cfg = WhisperConfig(language = if (autoLanguage == "auto") "" else autoLanguage)
                             val result = Whisper.transcribe(model, audioFile.absolutePath, cfg)
                             result.segments.mapNotNull { segment ->
                                 val text = segment.text.trim()
@@ -784,8 +784,9 @@ class MainActivity : Activity() {
                     refreshCueList()
                     toast("${resultCues.size} خط زیرنویس ساخته شد؛ متن و زمان‌ها را بازبینی کن")
                 }
-            } catch (error: Exception) {
-                toast("تبدیل انجام نشد: ${error.message ?: "خطای ناشناخته"}")
+            } catch (error: Throwable) {
+                val details = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+                toast("تشخیص گفتار ناموفق بود: $details")
             } finally {
                 progress.dismiss()
             }
