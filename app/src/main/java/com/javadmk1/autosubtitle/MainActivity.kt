@@ -732,26 +732,34 @@ class MainActivity : Activity() {
                         }
                     }
                     runOnUiThread {
-                        progress.progress = 100
-                        progress.setMessage("مدل آماده شد؛ در حال آماده‌سازی صدای فایل…")
+                        progress.progress = 5
+                        progress.setMessage("مدل آماده است؛ در حال آماده‌سازی صدای فایل…")
                     }
                     val mime = contentResolver.getType(uri) ?: ""
 
                     val audioFile = if (mime.startsWith("video/")) {
+                        runOnUiThread {
+                            progress.progress = 10
+                            progress.setMessage("در حال استخراج صدا از ویدئو؛ برای ویدئوهای طولانی زمان بیشتری لازم است…")
+                        }
                         extractAudioToWav(uri)
                     } else {
+                        runOnUiThread {
+                            progress.progress = 10
+                            progress.setMessage("در حال خواندن فایل صوتی…")
+                        }
                         copySelectedAudioToCache(uri)
                     }
                     try {
                         runOnUiThread {
-                            progress.progress = 0
-                            progress.setMessage("در حال بارگذاری موتور تشخیص گفتار؛ ممکن است بار اول کمی طول بکشد…")
+                            progress.progress = 20
+                            progress.setMessage("صدا آماده شد؛ در حال بارگذاری موتور تشخیص گفتار…")
                         }
                         val model = Whisper.loadModel(this@MainActivity, modelFile.absolutePath)
                         try {
                             runOnUiThread {
-                                progress.progress = 25
-                                progress.setMessage("موتور آماده شد؛ در حال تشخیص گفتار…")
+                                progress.progress = 30
+                                progress.setMessage("موتور آماده شد؛ در حال تشخیص گفتار روی گوشی. این مرحله ممکن است چند دقیقه طول بکشد…")
                             }
                             val cfg = WhisperConfig(language = autoLanguage)
                             val result = Whisper.transcribe(model, audioFile.absolutePath, cfg)
