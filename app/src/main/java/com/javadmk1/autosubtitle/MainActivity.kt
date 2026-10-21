@@ -633,7 +633,12 @@ class MainActivity : Activity() {
                 selectedFileLabel.text = "فایل انتخاب‌شده: ${data.data!!.lastPathSegment ?: "فایل محلی"}"
                 val selectedUri = data.data!!
                 val selectedMime = contentResolver.getType(selectedUri) ?: ""
-                if (selectedMime.startsWith("video/")) {
+                val selectedName = getDisplayName(selectedUri).lowercase(java.util.Locale.ROOT)
+                val selectedIsVideo = selectedMime.startsWith("video/") ||
+                    selectedName.endsWith(".mp4") || selectedName.endsWith(".mkv") ||
+                    selectedName.endsWith(".mov") || selectedName.endsWith(".webm") ||
+                    selectedName.endsWith(".3gp") || selectedName.endsWith(".avi")
+                if (selectedIsVideo) {
                     videoPreview.visibility = android.view.View.VISIBLE
                     subtitleOverlay.visibility = android.view.View.GONE
                     videoPreview.setVideoURI(selectedUri)
@@ -642,7 +647,7 @@ class MainActivity : Activity() {
                     videoPreview.visibility = android.view.View.GONE
                     subtitleOverlay.visibility = android.view.View.GONE
                 }
-                toast(if (selectedMime.startsWith("video/")) "ویدئو انتخاب شد؛ برای پخش از کنترل‌های ویدئو استفاده کن" else "فایل صوتی انتخاب شد")
+                toast(if (selectedIsVideo) "ویدئو انتخاب شد؛ برای پخش از کنترل‌های ویدئو استفاده کن" else "فایل صوتی انتخاب شد")
             }
             REQUEST_EXPORT_SRT -> {
                 data.data?.let { uri -> writeSrt(uri) }
@@ -735,21 +740,14 @@ class MainActivity : Activity() {
                         progress.progress = 5
                         progress.setMessage("مدل آماده است؛ در حال آماده‌سازی صدای فایل…")
                     }
-                    val mime = contentResolver.getType(uri) ?: ""
-
-                    val audioFile = if (mime.startsWith("video/")) {
-                        runOnUiThread {
-                            progress.progress = 10
-                            progress.setMessage("در حال استخراج صدا از ویدئو؛ برای ویدئوهای طولانی زمان بیشتری لازم است…")
-                        }
-                        extractAudioToWav(uri)
-                    } else {
-                        runOnUiThread {
-                            progress.progress = 10
-                            progress.setMessage("در حال خواندن فایل صوتی…")
-                        }
-                        copySelectedAudioToCache(uri)
+                    runOnUiThread {
+                        progress.progress = 10
+                        progress.setMessage("در حال آماده‌سازی و تبدیل صدای فایل؛ این مرحله ممکن است کمی طول بکشد…")
                     }
+
+                    // Always decode the selected media to a local WAV. This avoids relying on
+                    // provider MIME types or filename extensions and gives Whisper a consistent input.
+                    val audioFile = extractAudioToWav(uri)
                     try {
                         runOnUiThread {
                             progress.progress = 20
@@ -761,7 +759,7 @@ class MainActivity : Activity() {
                                 progress.isIndeterminate = true
                                 progress.setMessage("در حال تشخیص گفتار روی گوشی؛ برای فایل‌های طولانی چند دقیقه صبر کن…")
                             }
-                            val cfg = WhisperConfig(language = if (autoLanguage == "auto") "" else autoLanguage)
+                            val cfg = WhisperConfig(language = if (autoLanguage == "auto") "auto" else autoLanguage)
                             val result = Whisper.transcribe(model, audioFile.absolutePath, cfg)
                             result.segments.mapNotNull { segment ->
                                 val text = segment.text.trim()
@@ -791,21 +789,6 @@ class MainActivity : Activity() {
                 progress.dismiss()
             }
         }
-    }
-
-    private fun copySelectedAudioToCache(uri: Uri): File {
-        val name = getDisplayName(uri).lowercase(java.util.Locale.ROOT)
-        val ext = when {
-            name.endsWith(".wav") -> ".wav"
-            name.endsWith(".mp3") -> ".mp3"
-            name.endsWith(".flac") -> ".flac"
-            else -> throw IllegalStateException("برای تشخیص آفلاین، فعلاً فایل صوتی WAV، MP3 یا FLAC انتخاب کن")
-        }
-        val target = File(cacheDir, "asr_input_${System.currentTimeMillis()}$ext")
-        contentResolver.openInputStream(uri)?.use { input ->
-            FileOutputStream(target).use { output -> input.copyTo(output) }
-        } ?: throw IllegalStateException("خواندن فایل انتخاب‌شده ممکن نشد")
-        return target
     }
 
     private fun extractAudioToWav(uri: Uri): File {
