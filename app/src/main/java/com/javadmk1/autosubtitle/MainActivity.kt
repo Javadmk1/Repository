@@ -334,8 +334,57 @@ class MainActivity : Activity() {
             setSelection(0)
         }
         content.addView(modelQualitySpinner, matchWidth())
-        content.addView(makeButton("ساخت زیرنویس خودکار از فایل انتخاب‌شده") {
-            startLocalTranscription()
+        addSettingLabel("روش ساخت زیرنویس")
+        val transcriptionModeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                arrayOf("آفلاین روی گوشی (Whisper)", "آنلاین با API سازگار با OpenAI"))
+        }
+        content.addView(transcriptionModeSpinner, matchWidth())
+        addSettingLabel("ارائه‌دهندهٔ API")
+        val apiProviderSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                arrayOf("Groq", "OpenAI", "سرویس سازگار سفارشی"))
+        }
+        content.addView(apiProviderSpinner, matchWidth())
+        addSettingLabel("نشانی API")
+        val apiEndpointInput = EditText(this).apply {
+            setSingleLine(true)
+            setText("https://api.groq.com/openai/v1/audio/transcriptions")
+            hint = "https://.../audio/transcriptions"
+            setTextColor(0xFFF4F7FF.toInt())
+        }
+        content.addView(apiEndpointInput, matchWidth())
+        addSettingLabel("نام مدل")
+        val apiModelInput = EditText(this).apply {
+            setSingleLine(true)
+            setText("whisper-large-v3-turbo")
+            hint = "نام دقیق مدل ارائه‌دهنده"
+            setTextColor(0xFFF4F7FF.toInt())
+        }
+        content.addView(apiModelInput, matchWidth())
+        addSettingLabel("کلید API (در این نسخه ذخیره نمی‌شود)")
+        val apiKeyInput = EditText(this).apply {
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "کلید API خودت را وارد کن"
+            setTextColor(0xFFF4F7FF.toInt())
+        }
+        content.addView(apiKeyInput, matchWidth())
+        apiProviderSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                when (position) {
+                    0 -> { apiEndpointInput.setText("https://api.groq.com/openai/v1/audio/transcriptions"); apiModelInput.setText("whisper-large-v3-turbo") }
+                    1 -> { apiEndpointInput.setText("https://api.openai.com/v1/audio/transcriptions"); apiModelInput.setText("whisper-1") }
+                    else -> { apiEndpointInput.setText(""); apiModelInput.setText("") }
+                }
+            }
+        }
+        content.addView(makeButton("ساخت زیرنویس خودکار") {
+            if (transcriptionModeSpinner.selectedItemPosition == 1) {
+                startOnlineTranscription(apiEndpointInput.text.toString().trim(),
+                    apiModelInput.text.toString().trim(), apiKeyInput.text.toString().trim())
+            } else startLocalTranscription()
         }, matchWidth())
 
         content.addView(makeButton("حریم خصوصی و نحوهٔ پردازش فایل‌ها") { showPrivacyNotice() }, matchWidth())
@@ -665,6 +714,97 @@ class MainActivity : Activity() {
 
 
     private fun modelNameInAssets(): String = "models/ggml-base.bin"
+
+    private fun startOnlineTranscription(endpoint: String, modelName: String, apiKey: String) {
+        val uri = selectedMediaUri
+        if (uri == null) { toast("ابتدا فایل صوتی یا ویدئو را انتخاب کن"); return }
+        if (endpoint.isBlank() || modelName.isBlank() || apiKey.isBlank()) {
+            toast("نشانی API، نام مدل و کلید API را کامل وارد کن"); return
+        }
+        if (!endpoint.startsWith("https://")) { toast("نشانی API باید با https:// شروع شود"); return }
+        if (transcriptionJob?.isActive == true) { toast("تبدیل در حال انجام است"); return }
+        autoLanguage = when (languageSpinner.selectedItemPosition) { 1 -> "en"; 2 -> "auto"; else -> "fa" }
+        val progress = android.app.ProgressDialog(this).apply {
+            setTitle("زیرنویس خودکار آنلاین")
+            setMessage("در حال آماده‌سازی فایل برای ارسال به سرویس انتخاب‌شده…")
+            setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        transcriptionJob = CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val resultCues = withContext(Dispatchers.IO) {
+                    val displayName = getDisplayName(uri).lowercase(java.util.Locale.ROOT)
+                    val mime = (contentResolver.getType(uri) ?: "").lowercase(java.util.Locale.ROOT)
+                    val video = mime.startsWith("video/") || displayName.endsWith(".mp4") ||
+                        displayName.endsWith(".mkv") || displayName.endsWith(".mov") ||
+                        displayName.endsWith(".webm") || displayName.endsWith(".3gp") || displayName.endsWith(".avi")
+                    val audioFile = if (video) extractAudioToWav(uri) else prepareAudioForWhisper(uri, displayName, mime)
+                    try {
+                        if (audioFile.length() > 24L * 1024L * 1024L) {
+                            throw IllegalStateException("فایل بیش از 24 مگابایت است؛ این نسخه هنوز تقسیم خودکار فایل‌های بزرگ را ندارد.")
+                        }
+                        val boundary = "----SubtitleYar" + System.currentTimeMillis().toString()
+                        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                            requestMethod = "POST"
+                            connectTimeout = 20000
+                            readTimeout = 180000
+                            doOutput = true
+                            setRequestProperty("Authorization", "Bearer " + apiKey)
+                            setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary)
+                        }
+                        try {
+                            connection.outputStream.use { output ->
+                                fun writeField(name: String, value: String) {
+                                    output.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n").toByteArray(Charsets.UTF_8))
+                                }
+                                writeField("model", modelName)
+                                writeField("response_format", "verbose_json")
+                                if (autoLanguage != "auto") writeField("language", autoLanguage)
+                                output.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n").toByteArray(Charsets.UTF_8))
+                                audioFile.inputStream().use { it.copyTo(output) }
+                                output.write(("\r\n--" + boundary + "--\r\n").toByteArray(Charsets.UTF_8))
+                                output.flush()
+                            }
+                            val status = connection.responseCode
+                            val body = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                            if (status !in 200..299) {
+                                val detail = try { JSONObject(body).optJSONObject("error")?.optString("message") } catch (_: Exception) { null }
+                                throw IllegalStateException("API HTTP " + status + ": " + (detail?.takeIf { it.isNotBlank() } ?: body.take(180)))
+                            }
+                            val json = JSONObject(body)
+                            val segments = json.optJSONArray("segments")
+                            val parsed = mutableListOf<Cue>()
+                            if (segments != null) for (i in 0 until segments.length()) {
+                                val item = segments.optJSONObject(i) ?: continue
+                                val start = (item.optDouble("start", -1.0) * 1000).toLong()
+                                val end = (item.optDouble("end", -1.0) * 1000).toLong()
+                                val textValue = item.optString("text").trim()
+                                if (start >= 0 && end > start && textValue.isNotBlank()) parsed.add(Cue(start, end, textValue))
+                            }
+                            if (parsed.isEmpty()) {
+                                val transcript = json.optString("text").trim()
+                                if (transcript.isNotBlank()) parsed.add(Cue(0L, 5000L, transcript))
+                            }
+                            parsed
+                        } finally { connection.disconnect() }
+                    } finally { audioFile.delete() }
+                }
+                if (resultCues.isEmpty()) toast("سرویس متن زیرنویس برنگرداند؛ مدل و قالب پاسخ را بررسی کن")
+                else {
+                    cues.clear()
+                    cues.addAll(resultCues)
+                    editingCueIndex = null
+                    refreshCueList()
+                    toast(resultCues.size.toString() + " بخش زیرنویس از API دریافت شد")
+                }
+            } catch (error: Throwable) {
+                val details = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+                toast("تبدیل آنلاین ناموفق بود: " + details)
+            } finally { progress.dismiss() }
+        }
+    }
 
     private fun startLocalTranscription() {
         val uri = selectedMediaUri
