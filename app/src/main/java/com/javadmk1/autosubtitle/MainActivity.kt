@@ -373,10 +373,36 @@ class MainActivity : Activity() {
         apiProviderSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val textMode = transcriptionModeSpinner.selectedItemPosition == 2
                 when (position) {
-                    0 -> { apiEndpointInput.setText("https://api.groq.com/openai/v1/audio/transcriptions"); apiModelInput.setText("whisper-large-v3-turbo") }
-                    1 -> { apiEndpointInput.setText("https://api.openai.com/v1/audio/transcriptions"); apiModelInput.setText("whisper-1") }
+                    0 -> {
+                        apiEndpointInput.setText(if (textMode) "https://api.groq.com/openai/v1/chat/completions" else "https://api.groq.com/openai/v1/audio/transcriptions")
+                        apiModelInput.setText(if (textMode) "llama-3.3-70b-versatile" else "whisper-large-v3-turbo")
+                    }
+                    1 -> {
+                        apiEndpointInput.setText(if (textMode) "https://api.openai.com/v1/chat/completions" else "https://api.openai.com/v1/audio/transcriptions")
+                        apiModelInput.setText(if (textMode) "gpt-4o-mini" else "whisper-1")
+                    }
                     else -> { apiEndpointInput.setText(""); apiModelInput.setText("") }
+                }
+            }
+        }
+        transcriptionModeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val provider = apiProviderSpinner.selectedItemPosition
+                if (position == 2) {
+                    when (provider) {
+                        0 -> { apiEndpointInput.setText("https://api.groq.com/openai/v1/chat/completions"); apiModelInput.setText("llama-3.3-70b-versatile") }
+                        1 -> { apiEndpointInput.setText("https://api.openai.com/v1/chat/completions"); apiModelInput.setText("gpt-4o-mini") }
+                        else -> { apiEndpointInput.setText(""); apiModelInput.setText("") }
+                    }
+                } else if (position == 1) {
+                    when (provider) {
+                        0 -> { apiEndpointInput.setText("https://api.groq.com/openai/v1/audio/transcriptions"); apiModelInput.setText("whisper-large-v3-turbo") }
+                        1 -> { apiEndpointInput.setText("https://api.openai.com/v1/audio/transcriptions"); apiModelInput.setText("whisper-1") }
+                        else -> { apiEndpointInput.setText(""); apiModelInput.setText("") }
+                    }
                 }
             }
         }
