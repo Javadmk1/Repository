@@ -343,7 +343,7 @@ class MainActivity : Activity() {
         addSettingLabel("ارائه‌دهندهٔ API")
         val apiProviderSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                arrayOf("Groq", "OpenAI", "سرویس سازگار سفارشی"))
+                arrayOf("Groq", "OpenAI", "DeepSeek", "Kimi", "Qwen (Alibaba)", "GLM (Zhipu)", "سرویس سازگار سفارشی"))
         }
         content.addView(apiProviderSpinner, matchWidth())
         addSettingLabel("نشانی API")
@@ -383,7 +383,15 @@ class MainActivity : Activity() {
                         apiEndpointInput.setText(if (textMode) "https://api.openai.com/v1/chat/completions" else "https://api.openai.com/v1/audio/transcriptions")
                         apiModelInput.setText(if (textMode) "gpt-4o-mini" else "whisper-1")
                     }
+                    2 -> { apiEndpointInput.setText("https://api.deepseek.com/chat/completions"); apiModelInput.setText("deepseek-chat") }
+                    3 -> { apiEndpointInput.setText("https://api.moonshot.ai/v1/chat/completions"); apiModelInput.setText("kimi-k2.5") }
+                    4 -> { apiEndpointInput.setText("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"); apiModelInput.setText("qwen-plus") }
+                    5 -> { apiEndpointInput.setText("https://open.bigmodel.cn/api/paas/v4/chat/completions"); apiModelInput.setText("glm-4.5-air") }
                     else -> { apiEndpointInput.setText(""); apiModelInput.setText("") }
+                }
+                if (!textMode && position >= 2 && position <= 5) {
+                    apiEndpointInput.setText("")
+                    apiModelInput.setText("")
                 }
             }
         }
@@ -395,6 +403,10 @@ class MainActivity : Activity() {
                     when (provider) {
                         0 -> { apiEndpointInput.setText("https://api.groq.com/openai/v1/chat/completions"); apiModelInput.setText("llama-3.3-70b-versatile") }
                         1 -> { apiEndpointInput.setText("https://api.openai.com/v1/chat/completions"); apiModelInput.setText("gpt-4o-mini") }
+                        2 -> { apiEndpointInput.setText("https://api.deepseek.com/chat/completions"); apiModelInput.setText("deepseek-chat") }
+                        3 -> { apiEndpointInput.setText("https://api.moonshot.ai/v1/chat/completions"); apiModelInput.setText("kimi-k2.5") }
+                        4 -> { apiEndpointInput.setText("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"); apiModelInput.setText("qwen-plus") }
+                        5 -> { apiEndpointInput.setText("https://open.bigmodel.cn/api/paas/v4/chat/completions"); apiModelInput.setText("glm-4.5-air") }
                         else -> { apiEndpointInput.setText(""); apiModelInput.setText("") }
                     }
                 } else if (position == 1) {
