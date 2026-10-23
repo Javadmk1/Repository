@@ -337,7 +337,7 @@ class MainActivity : Activity() {
         addSettingLabel("روش ساخت زیرنویس")
         val transcriptionModeSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                arrayOf("آفلاین روی گوشی (Whisper)", "آنلاین با API سازگار با OpenAI"))
+                arrayOf("آفلاین روی گوشی (Whisper)", "آنلاین: تشخیص گفتار با API", "ترجمه/اصلاح زیرنویس با مدل متنی"))
         }
         content.addView(transcriptionModeSpinner, matchWidth())
         addSettingLabel("ارائه‌دهندهٔ API")
@@ -381,10 +381,13 @@ class MainActivity : Activity() {
             }
         }
         content.addView(makeButton("ساخت زیرنویس خودکار") {
-            if (transcriptionModeSpinner.selectedItemPosition == 1) {
-                startOnlineTranscription(apiEndpointInput.text.toString().trim(),
+            when (transcriptionModeSpinner.selectedItemPosition) {
+                1 -> startOnlineTranscription(apiEndpointInput.text.toString().trim(),
                     apiModelInput.text.toString().trim(), apiKeyInput.text.toString().trim())
-            } else startLocalTranscription()
+                2 -> startSubtitleTextProcessing(apiEndpointInput.text.toString().trim(),
+                    apiModelInput.text.toString().trim(), apiKeyInput.text.toString().trim())
+                else -> startLocalTranscription()
+            }
         }, matchWidth())
 
         content.addView(makeButton("حریم خصوصی و نحوهٔ پردازش فایل‌ها") { showPrivacyNotice() }, matchWidth())
@@ -802,6 +805,81 @@ class MainActivity : Activity() {
             } catch (error: Throwable) {
                 val details = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
                 toast("تبدیل آنلاین ناموفق بود: " + details)
+            } finally { progress.dismiss() }
+        }
+    }
+
+    private fun startSubtitleTextProcessing(endpoint: String, modelName: String, apiKey: String) {
+        if (cues.isEmpty()) { toast("ابتدا زیرنویس بساز یا فایل SRT وارد کن"); return }
+        if (endpoint.isBlank() || modelName.isBlank() || apiKey.isBlank()) {
+            toast("نشانی API، نام مدل و کلید API را کامل وارد کن"); return
+        }
+        if (!endpoint.startsWith("https://")) { toast("نشانی API باید با https:// شروع شود"); return }
+        if (transcriptionJob?.isActive == true) { toast("پردازش در حال انجام است"); return }
+        val originalCues = cues.toList()
+        val progress = android.app.ProgressDialog(this).apply {
+            setTitle("ترجمه و اصلاح زیرنویس")
+            setMessage("در حال ارسال متن زیرنویس به مدل انتخاب‌شده…")
+            setProgressStyle(android.app.ProgressDialog.STYLE_SPINNER)
+            setCancelable(false)
+            show()
+        }
+        transcriptionJob = CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val processed = withContext(Dispatchers.IO) {
+                    val boundary = "----SubtitleYarText" + System.currentTimeMillis().toString()
+                    val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 20000
+                        readTimeout = 120000
+                        doOutput = true
+                        setRequestProperty("Authorization", "Bearer " + apiKey)
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    }
+                    try {
+                        val source = originalCues.mapIndexed { index, cue ->
+                            JSONObject().put("id", index).put("start_ms", cue.startMs)
+                                .put("end_ms", cue.endMs).put("text", cue.text)
+                        }
+                        val prompt = "You are a subtitle editor. Translate each subtitle text to Persian if it is English, otherwise correct spelling and punctuation while preserving the original language. Return ONLY valid JSON: {\"segments\":[{\"id\":0,\"text\":\"...\"}]}. Preserve every id and do not add explanations. Subtitle data: " + source.toString()
+                        val body = JSONObject().put("model", modelName)
+                            .put("messages", org.json.JSONArray().put(JSONObject().put("role", "user").put("content", prompt)))
+                            .put("temperature", 0.2)
+                        connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                        val status = connection.responseCode
+                        val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                            ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                        if (status !in 200..299) {
+                            val detail = try { JSONObject(response).optJSONObject("error")?.optString("message") } catch (_: Exception) { null }
+                            throw IllegalStateException("API HTTP " + status + ": " + (detail?.takeIf { it.isNotBlank() } ?: response.take(180)))
+                        }
+                        val root = JSONObject(response)
+                        val messageText = root.optJSONArray("choices")?.optJSONObject(0)
+                            ?.optJSONObject("message")?.optString("content").orEmpty()
+                        val jsonText = messageText.substringAfter("{", "").let { if (it.isNotEmpty()) "{" + it.substringBeforeLast("}", it) + "}" else "" }
+                        if (jsonText.isBlank()) throw IllegalStateException("مدل پاسخ JSON معتبر برنگرداند")
+                        val segments = JSONObject(jsonText).optJSONArray("segments")
+                            ?: throw IllegalStateException("پاسخ مدل فاقد segments است")
+                        val mapped = originalCues.toMutableList()
+                        for (i in 0 until segments.length()) {
+                            val item = segments.optJSONObject(i) ?: continue
+                            val id = item.optInt("id", -1)
+                            val textValue = item.optString("text").trim()
+                            if (id in mapped.indices && textValue.isNotBlank()) {
+                                val oldCue = mapped[id]
+                                mapped[id] = Cue(oldCue.startMs, oldCue.endMs, textValue)
+                            }
+                        }
+                        mapped
+                    } finally { connection.disconnect() }
+                }
+                cues.clear()
+                cues.addAll(processed)
+                editingCueIndex = null
+                refreshCueList()
+                toast("متن زیرنویس با مدل انتخاب‌شده پردازش شد؛ زمان‌بندی حفظ شد")
+            } catch (error: Throwable) {
+                toast("پردازش متن ناموفق بود: " + (error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName))
             } finally { progress.dismiss() }
         }
     }
